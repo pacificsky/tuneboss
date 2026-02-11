@@ -1,0 +1,20 @@
+{
+  "name": "tuneboss",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multi-service now-playing display for iPhone",
+  "scripts": {
+    "dev:server": "node server/index.js",
+    "dev:client": "npm run dev --prefix client",
+    "build:client": "npm run build --prefix client",
+    "start": "NODE_ENV=production node server/index.js",
+    "install:all": "npm install && npm install --prefix client"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "node-vibrant": "^3.1.6",
+    "socket.io": "^4.8.1"
+  }
+}
