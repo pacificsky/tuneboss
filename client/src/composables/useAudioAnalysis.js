@@ -2,116 +2,116 @@ import { ref, watch, onUnmounted } from 'vue'
 
 const NUM_BANDS = 10
 
-// Map 12 Spotify pitch classes to 10 display bands
-// Pitch classes: C, C#, D, D#, E, F, F#, G, G#, A, A#, B
-// Bands roughly group: low → mid → high
-const PITCH_TO_BAND = [0, 0, 1, 2, 2, 3, 4, 4, 5, 6, 7, 8]
-// Bands 9 is driven by timbre high-frequency component
+// Simple hash to derive per-track seed from trackId
+function hashCode(str) {
+  let h = 0
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0
+  }
+  return h
+}
 
-export function useAudioAnalysis(analysis, playback) {
+// Seeded PRNG (mulberry32) — deterministic sequence per track
+function mulberry32(seed) {
+  return function () {
+    seed |= 0
+    seed = (seed + 0x6d2b79f5) | 0
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// Attempt to derive a plausible BPM from the track duration.
+// Most popular music is 90–150 BPM.  We hash the trackId to pick
+// a value in that range so each song gets a consistent tempo.
+function deriveTempo(seed) {
+  const rng = mulberry32(seed)
+  return 90 + rng() * 60 // 90–150 BPM
+}
+
+// Generate smooth per-band amplitude curves using layered sine waves
+// with frequencies/phases seeded by the track.
+function buildBandOscillators(seed) {
+  const rng = mulberry32(seed)
+  const oscillators = []
+  for (let b = 0; b < NUM_BANDS; b++) {
+    // Each band gets 3 layered sinusoids with different speeds
+    const layers = []
+    for (let l = 0; l < 3; l++) {
+      layers.push({
+        freq: 0.3 + rng() * 1.2,   // cycles per second
+        phase: rng() * Math.PI * 2, // starting phase
+        amp: 0.25 + rng() * 0.35    // contribution weight
+      })
+    }
+    oscillators.push(layers)
+  }
+  return oscillators
+}
+
+export function useAudioAnalysis(trackId, playback) {
   const bands = ref(new Array(NUM_BANDS).fill(0))
   const peaks = ref(new Array(NUM_BANDS).fill(0))
   let animFrame = null
-  let segments = []
   let startTime = 0
   let startPosition = 0
 
-  function findSegmentIndex(positionSec) {
-    // Binary search for the segment at this position
-    let lo = 0
-    let hi = segments.length - 1
-    while (lo <= hi) {
-      const mid = (lo + hi) >> 1
-      const seg = segments[mid]
-      if (positionSec < seg.start) {
-        hi = mid - 1
-      } else if (positionSec >= seg.start + seg.duration) {
-        lo = mid + 1
-      } else {
-        return mid
-      }
-    }
-    return Math.max(0, lo - 1)
+  // Per-track state
+  let bpm = 120
+  let oscillators = []
+  let beatPhase = 0
+
+  function applyTrack(id) {
+    if (!id) return
+    const seed = hashCode(id)
+    bpm = deriveTempo(seed)
+    oscillators = buildBandOscillators(seed)
+    beatPhase = (seed & 0xff) / 255 * Math.PI * 2
   }
 
   function getCurrentPosition() {
-    const elapsed = (Date.now() - startTime) / 1000
-    return startPosition + elapsed
+    return startPosition + (Date.now() - startTime) / 1000
   }
 
-  function computeBands(seg, nextSeg, progress) {
-    const result = new Array(NUM_BANDS).fill(0)
-
-    if (!seg) return result
-
-    // Normalize loudness: Spotify loudness is in dB (typically -60 to 0)
-    // Map to 0..1 range
-    const loudness = Math.max(0, Math.min(1, (seg.loudnessMax + 60) / 60))
-
-    // Map pitches to bands
-    for (let i = 0; i < 12; i++) {
-      const band = PITCH_TO_BAND[i]
-      const pitch = seg.pitches[i] || 0
-
-      // Interpolate with next segment if available
-      let value = pitch
-      if (nextSeg && progress > 0) {
-        const nextPitch = nextSeg.pitches[i] || 0
-        value = pitch + (nextPitch - pitch) * progress
-      }
-
-      result[band] = Math.max(result[band], value * loudness)
-    }
-
-    // Band 9: driven by timbre high-frequency energy
-    if (seg.timbre) {
-      const highFreqTimbre = Math.max(0, seg.timbre[1] || 0) / 200
-      result[9] = Math.min(1, highFreqTimbre * loudness)
-    }
-
-    // Normalize band values that got multiple pitch contributions
-    // Bands 0, 2, 4 get 2 pitches each — average them
-    result[0] /= 1.5
-    result[2] /= 1.5
-    result[4] /= 1.5
-
-    return result
-  }
-
-  const PEAK_DECAY = 0.015 // per frame
-  const SMOOTH_FACTOR = 0.3
+  const PEAK_DECAY = 0.015
+  const SMOOTH_FACTOR = 0.25
 
   function animate() {
-    if (!segments.length) {
+    if (!oscillators.length) {
       animFrame = requestAnimationFrame(animate)
       return
     }
 
-    const posSec = getCurrentPosition()
-    const idx = findSegmentIndex(posSec)
-    const seg = segments[idx]
-    const nextSeg = segments[idx + 1] || null
+    const t = getCurrentPosition()
+    const beatInterval = 60 / bpm
+    // Pulsing envelope synced to the derived BPM
+    const beatT = ((t / beatInterval) + beatPhase) % 1
+    const beatPulse = 0.5 + 0.5 * Math.cos(beatT * Math.PI * 2)
 
-    // Progress within current segment (0..1)
-    const progress = seg ? Math.min(1, (posSec - seg.start) / seg.duration) : 0
+    const computed = new Array(NUM_BANDS)
+    for (let b = 0; b < NUM_BANDS; b++) {
+      let val = 0
+      const layers = oscillators[b]
+      for (let l = 0; l < layers.length; l++) {
+        const { freq, phase, amp } = layers[l]
+        val += amp * (0.5 + 0.5 * Math.sin(t * freq * Math.PI * 2 + phase))
+      }
+      // Mix in the beat pulse — lower bands feel it more
+      const beatWeight = 0.4 * (1 - b / NUM_BANDS)
+      val = val * (1 - beatWeight) + beatPulse * beatWeight
+      computed[b] = Math.max(0, Math.min(1, val))
+    }
 
-    const computed = computeBands(seg, nextSeg, progress)
-    const currentBands = bands.value
-    const currentPeaks = peaks.value
+    const curBands = bands.value
+    const curPeaks = peaks.value
     const newBands = []
     const newPeaks = []
 
     for (let i = 0; i < NUM_BANDS; i++) {
-      // Smooth transition
-      const smoothed = currentBands[i] + (computed[i] - currentBands[i]) * SMOOTH_FACTOR
+      const smoothed = curBands[i] + (computed[i] - curBands[i]) * SMOOTH_FACTOR
       newBands.push(smoothed)
-
-      // Peak hold with decay
-      if (smoothed > currentPeaks[i]) {
-        newPeaks.push(smoothed)
-      } else {
-        newPeaks.push(Math.max(0, currentPeaks[i] - PEAK_DECAY))
-      }
+      newPeaks.push(smoothed > curPeaks[i] ? smoothed : Math.max(0, curPeaks[i] - PEAK_DECAY))
     }
 
     bands.value = newBands
@@ -120,20 +120,15 @@ export function useAudioAnalysis(analysis, playback) {
     animFrame = requestAnimationFrame(animate)
   }
 
-  watch(analysis, (a) => {
-    if (a?.segments) {
-      segments = a.segments
-    }
-  }, { immediate: true })
+  watch(trackId, (id) => applyTrack(id), { immediate: true })
 
   watch(playback, (p) => {
     if (p) {
-      startPosition = (p.position || 0) / 1000 // ms -> sec
+      startPosition = (p.position || 0) / 1000
       startTime = p.timestamp || Date.now()
     }
   }, { immediate: true })
 
-  // Start animation loop
   animFrame = requestAnimationFrame(animate)
 
   onUnmounted(() => {

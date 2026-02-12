@@ -12,10 +12,6 @@ class Aggregator {
       this.io.emit('now-playing', track);
     };
 
-    this.spotify.onAnalysisReady = (analysis) => {
-      this.io.emit('analysis-data', analysis);
-    };
-
     this.spotify.onPositionUpdate = (position) => {
       this.io.emit('playback-position', position);
     };
@@ -40,11 +36,6 @@ class Aggregator {
   syncClient(socket) {
     if (this.currentTrack) {
       socket.emit('now-playing', this.currentTrack);
-
-      const analysis = this.spotify.analysisCache.get(this.currentTrack.trackId);
-      if (analysis) {
-        socket.emit('analysis-data', analysis);
-      }
     }
   }
 }

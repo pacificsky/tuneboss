@@ -10,8 +10,7 @@
       :album="track?.album"
     />
     <SpectrumAnalyzer
-      v-if="analysis"
-      :analysis="analysis"
+      :trackId="track?.trackId"
       :playback="playback"
     />
     <div class="now-playing__source">
@@ -28,7 +27,6 @@ import SpectrumAnalyzer from './SpectrumAnalyzer.vue'
 
 defineProps({
   track: { type: Object, default: null },
-  analysis: { type: Object, default: null },
   playback: { type: Object, default: () => ({ position: 0, timestamp: Date.now() }) }
 })
 

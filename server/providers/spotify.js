@@ -6,7 +6,6 @@ const POLL_INTERVAL = 3000;
 class SpotifyProvider {
   constructor() {
     this.currentTrackId = null;
-    this.analysisCache = new Map(); // trackId -> analysis
     this.pollTimer = null;
     this.onTrackUpdate = null;
     this.onPositionUpdate = null;
@@ -90,70 +89,9 @@ class SpotifyProvider {
         };
 
         this.onTrackUpdate?.(trackData);
-
-        // Fetch audio analysis in background
-        this.fetchAnalysis(trackId, token);
       }
     } catch (err) {
       console.error('[spotify] Poll error:', err.message);
-    }
-  }
-
-  async fetchAnalysis(trackId, token) {
-    if (this.analysisDisabled) return;
-
-    // Check cache
-    if (this.analysisCache.has(trackId)) {
-      this.onAnalysisReady?.(this.analysisCache.get(trackId));
-      return;
-    }
-
-    try {
-      const res = await fetch(`${SPOTIFY_API}/audio-analysis/${trackId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!res.ok) {
-        if (res.status === 403) {
-          console.warn(
-            '[spotify] Audio analysis endpoint returned 403 — Spotify deprecated this API in November 2024. ' +
-            'The spectrum analyzer will be unavailable. See: https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api'
-          );
-          this.analysisDisabled = true;
-        } else {
-          console.warn('[spotify] Audio analysis fetch failed (%d)', res.status);
-        }
-        return;
-      }
-
-      const data = await res.json();
-      const segments = data.segments.map(seg => ({
-        start: seg.start,
-        duration: seg.duration,
-        loudnessStart: seg.loudness_start,
-        loudnessMax: seg.loudness_max,
-        loudnessMaxTime: seg.loudness_max_time,
-        pitches: seg.pitches,
-        timbre: seg.timbre
-      }));
-
-      const analysis = {
-        trackId,
-        segments,
-        tempo: data.track.tempo,
-        duration: data.track.duration
-      };
-
-      // Keep cache bounded
-      if (this.analysisCache.size > 50) {
-        const oldest = this.analysisCache.keys().next().value;
-        this.analysisCache.delete(oldest);
-      }
-      this.analysisCache.set(trackId, analysis);
-
-      this.onAnalysisReady?.(analysis);
-    } catch (err) {
-      console.error('[spotify] Analysis fetch error:', err.message);
     }
   }
 }
