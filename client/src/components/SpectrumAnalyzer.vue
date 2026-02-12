@@ -13,7 +13,7 @@ import { ref, toRef, onMounted, onUnmounted, watch } from 'vue'
 import { useAudioAnalysis } from '../composables/useAudioAnalysis.js'
 
 const props = defineProps({
-  analysis: { type: Object, default: null },
+  trackId: { type: String, default: null },
   playback: { type: Object, default: () => ({ position: 0, timestamp: Date.now() }) }
 })
 
@@ -22,7 +22,7 @@ const canvasWidth = 340
 const canvasHeight = 100
 
 const { bands, peaks } = useAudioAnalysis(
-  toRef(props, 'analysis'),
+  toRef(props, 'trackId'),
   toRef(props, 'playback')
 )
 

@@ -5,15 +5,12 @@ class Aggregator {
     this.io = io;
     this.spotify = new SpotifyProvider();
     this.currentTrack = null;
+    this.clientCount = 0;
 
     this.spotify.onTrackUpdate = (track) => {
       this.currentTrack = track;
       console.log('[aggregator] Now playing: %s — %s', track.title, track.artist);
       this.io.emit('now-playing', track);
-    };
-
-    this.spotify.onAnalysisReady = (analysis) => {
-      this.io.emit('analysis-data', analysis);
     };
 
     this.spotify.onPositionUpdate = (position) => {
@@ -27,24 +24,28 @@ class Aggregator {
     };
   }
 
-  start() {
-    this.spotify.start();
-    console.log('[aggregator] Started');
+  clientConnected(socket) {
+    this.clientCount++;
+    console.log('[aggregator] Client connected (%d active)', this.clientCount);
+    this.syncClient(socket);
+    if (this.clientCount === 1) {
+      this.spotify.start();
+    }
   }
 
-  stop() {
-    this.spotify.stop();
+  clientDisconnected() {
+    this.clientCount = Math.max(0, this.clientCount - 1);
+    console.log('[aggregator] Client disconnected (%d active)', this.clientCount);
+    if (this.clientCount === 0) {
+      this.spotify.stop();
+      console.log('[aggregator] No clients — paused Spotify polling');
+    }
   }
 
   // Send current state to a newly connected client
   syncClient(socket) {
     if (this.currentTrack) {
       socket.emit('now-playing', this.currentTrack);
-
-      const analysis = this.spotify.analysisCache.get(this.currentTrack.trackId);
-      if (analysis) {
-        socket.emit('analysis-data', analysis);
-      }
     }
   }
 }

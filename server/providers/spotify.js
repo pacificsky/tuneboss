@@ -6,7 +6,6 @@ const POLL_INTERVAL = 3000;
 class SpotifyProvider {
   constructor() {
     this.currentTrackId = null;
-    this.analysisCache = new Map(); // trackId -> analysis
     this.pollTimer = null;
     this.onTrackUpdate = null;
     this.onPositionUpdate = null;
@@ -90,60 +89,9 @@ class SpotifyProvider {
         };
 
         this.onTrackUpdate?.(trackData);
-
-        // Fetch audio analysis in background
-        this.fetchAnalysis(trackId, token);
       }
     } catch (err) {
       console.error('[spotify] Poll error:', err.message);
-    }
-  }
-
-  async fetchAnalysis(trackId, token) {
-    // Check cache
-    if (this.analysisCache.has(trackId)) {
-      this.onAnalysisReady?.(this.analysisCache.get(trackId));
-      return;
-    }
-
-    try {
-      const res = await fetch(`${SPOTIFY_API}/audio-analysis/${trackId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!res.ok) {
-        console.warn('[spotify] Audio analysis fetch failed (%d)', res.status);
-        return;
-      }
-
-      const data = await res.json();
-      const segments = data.segments.map(seg => ({
-        start: seg.start,
-        duration: seg.duration,
-        loudnessStart: seg.loudness_start,
-        loudnessMax: seg.loudness_max,
-        loudnessMaxTime: seg.loudness_max_time,
-        pitches: seg.pitches,
-        timbre: seg.timbre
-      }));
-
-      const analysis = {
-        trackId,
-        segments,
-        tempo: data.track.tempo,
-        duration: data.track.duration
-      };
-
-      // Keep cache bounded
-      if (this.analysisCache.size > 50) {
-        const oldest = this.analysisCache.keys().next().value;
-        this.analysisCache.delete(oldest);
-      }
-      this.analysisCache.set(trackId, analysis);
-
-      this.onAnalysisReady?.(analysis);
-    } catch (err) {
-      console.error('[spotify] Analysis fetch error:', err.message);
     }
   }
 }

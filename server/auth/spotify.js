@@ -1,19 +1,45 @@
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize';
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const SCOPES = 'user-read-currently-playing user-read-playback-state';
 
-// In-memory token store (persists across requests, resets on server restart)
+const TOKEN_PATH = path.join(__dirname, '..', '..', '.tokens.json');
+
 let tokenStore = {
   accessToken: null,
   refreshToken: null,
   expiresAt: 0
 };
 
-function getTokenStore() {
-  return tokenStore;
+function loadTokens() {
+  try {
+    const data = JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf8'));
+    tokenStore.accessToken = data.accessToken || null;
+    tokenStore.refreshToken = data.refreshToken || null;
+    tokenStore.expiresAt = data.expiresAt || 0;
+    console.log('[auth] Loaded saved tokens from disk');
+  } catch {
+    // No saved tokens — fresh start
+  }
 }
+
+function saveTokens() {
+  try {
+    fs.writeFileSync(TOKEN_PATH, JSON.stringify({
+      accessToken: tokenStore.accessToken,
+      refreshToken: tokenStore.refreshToken,
+      expiresAt: tokenStore.expiresAt
+    }), 'utf8');
+  } catch (err) {
+    console.warn('[auth] Failed to save tokens:', err.message);
+  }
+}
+
+// Load any previously saved tokens on startup
+loadTokens();
 
 function setupSpotifyAuth(app) {
   const clientId = process.env.SPOTIFY_CLIENT_ID;
@@ -51,6 +77,7 @@ function setupSpotifyAuth(app) {
       tokenStore.accessToken = tokens.access_token;
       tokenStore.refreshToken = tokens.refresh_token;
       tokenStore.expiresAt = Date.now() + tokens.expires_in * 1000;
+      saveTokens();
 
       console.log('[auth] Spotify authenticated successfully');
       res.redirect('/');
@@ -126,6 +153,7 @@ async function refreshAccessToken() {
     tokenStore.refreshToken = data.refresh_token;
   }
   tokenStore.expiresAt = Date.now() + data.expires_in * 1000;
+  saveTokens();
 
   console.log('[auth] Spotify token refreshed');
   return tokenStore.accessToken;
@@ -141,6 +169,7 @@ async function getValidAccessToken() {
     } catch (err) {
       console.error('[auth] Failed to refresh token:', err.message);
       tokenStore.accessToken = null;
+      saveTokens();
       return null;
     }
   }
@@ -148,4 +177,4 @@ async function getValidAccessToken() {
   return tokenStore.accessToken;
 }
 
-module.exports = { setupSpotifyAuth, getValidAccessToken, getTokenStore };
+module.exports = { setupSpotifyAuth, getValidAccessToken };

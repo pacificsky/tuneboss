@@ -3,7 +3,6 @@
     <NowPlaying
       v-if="connected && authenticated && track"
       :track="track"
-      :analysis="analysis"
       :playback="playback"
       @colors-extracted="onColorsExtracted"
     />
@@ -35,7 +34,6 @@ useWakeLock()
 const connected = ref(false)
 const authenticated = ref(false)
 const track = ref(null)
-const analysis = ref(null)
 const playback = ref({ position: 0, timestamp: Date.now() })
 const colors = ref({ bg: '#121212', text: '#ffffff' })
 
@@ -88,17 +86,12 @@ onMounted(() => {
     track.value = data
   })
 
-  socket.on('analysis-data', (data) => {
-    analysis.value = data
-  })
-
   socket.on('playback-position', (data) => {
     playback.value = { position: data.position, timestamp: Date.now() }
   })
 
   socket.on('playback-stopped', () => {
     track.value = null
-    analysis.value = null
   })
 })
 

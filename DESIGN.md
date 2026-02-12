@@ -2,7 +2,7 @@
 
 ## Overview
 
-TuneBoss is a real-time "now playing" display designed to run on an iPhone 12 Pro as a dedicated always-on screen mounted under a monitor. A Node.js/Express backend polls the Spotify Web API for the currently playing track and its audio analysis data, then pushes updates over Socket.io to a Vue 3 PWA frontend. The frontend renders album art, track metadata, a dynamic color theme extracted from the cover art, and a 10-band spectrum analyzer driven by Spotify's per-segment pitch and loudness data at 60 fps.
+TuneBoss is a real-time "now playing" display designed to run on an iPhone 12 Pro as a dedicated always-on screen mounted under a monitor. A Node.js/Express backend polls the Spotify Web API for the currently playing track, then pushes updates over Socket.io to a Vue 3 PWA frontend. The frontend renders album art, track metadata, a dynamic color theme extracted from the cover art, and a 10-band spectrum analyzer with procedurally generated visuals at 60 fps.
 
 ## Architecture
 
@@ -30,7 +30,6 @@ TuneBoss is a real-time "now playing" display designed to run on an iPhone 12 Pr
 ┌──────────▼───────────────────────┐
 │  Spotify Web API                 │
 │  /me/player/currently-playing    │
-│  /audio-analysis/{trackId}       │
 └──────────────────────────────────┘
 ```
 
@@ -40,35 +39,37 @@ The backend owns all OAuth credentials and API secrets. The iPhone is a stateles
 
 ### `server/index.js` — Entry point
 
-Creates the Express app and HTTP server, attaches Socket.io with wildcard CORS, mounts Spotify OAuth routes, and serves the built Vue client from `client/dist/` as static files. A catch-all route implements SPA fallback (serves `index.html` for any path not starting with `/api/` or `/auth/`). On startup, it enters a 2-second polling loop waiting for Spotify authentication before starting the aggregator.
+Creates the Express app and HTTP server, attaches Socket.io with wildcard CORS, mounts Spotify OAuth routes, and serves the built Vue client from `client/dist/` as static files. A catch-all route implements SPA fallback (serves `index.html` for any path not starting with `/api/` or `/auth/`). Socket.io connection and disconnection events are delegated to the aggregator, which manages the Spotify polling lifecycle.
 
 ### `server/auth/spotify.js` — OAuth 2.0
 
 Implements the Authorization Code flow:
 
 1. `GET /auth/spotify` — Generates a random CSRF state token and redirects the user to Spotify's authorization page. Requests `user-read-currently-playing` and `user-read-playback-state` scopes.
-2. `GET /auth/spotify/callback` — Exchanges the authorization code for access and refresh tokens using Basic auth (client ID + secret). Stores tokens in an in-memory object.
+2. `GET /auth/spotify/callback` — Exchanges the authorization code for access and refresh tokens using Basic auth (client ID + secret). Stores tokens in memory and persists them to `.tokens.json` on disk.
 3. `GET /api/auth/status` — Returns `{ authenticated, expiresAt }` so the client can show the right UI state.
 
-Token refresh happens transparently: `getValidAccessToken()` checks if the token expires within 60 seconds and calls Spotify's token endpoint with the refresh token if needed. If refresh fails, the access token is cleared and the server logs the error.
+**Token persistence**: Tokens are saved to `.tokens.json` (gitignored) in the project root after every mutation — initial auth, refresh, and clear-on-failure. On startup, `loadTokens()` restores them from disk so the server can resume authenticated after a restart without requiring the user to re-authorize through the browser.
+
+Token refresh happens transparently: `getValidAccessToken()` checks if the token expires within 60 seconds and calls Spotify's token endpoint with the refresh token if needed. If refresh fails, the access token is cleared, the file is updated, and the server logs the error.
 
 ### `server/providers/spotify.js` — Spotify polling
 
-Polls `GET /me/player/currently-playing` every 3 seconds. On each poll:
+Polls `GET /me/player/currently-playing` every 3 seconds. Polling only runs while at least one Socket.io client is connected (managed by the aggregator). On each poll:
 
 - **204 (no content)** or `is_playing === false` → emits `onPlaybackStopped` if a track was previously active.
-- **Track change** (new `trackId`) → emits `onTrackUpdate` with `{ source, trackId, title, artist, album, albumArt, isPlaying, position, duration }`, then kicks off a background fetch of `GET /audio-analysis/{trackId}`.
+- **Track change** (new `trackId`) → emits `onTrackUpdate` with `{ source, trackId, title, artist, album, albumArt, isPlaying, position, duration }`.
 - **Same track** → emits `onPositionUpdate` with `{ position, duration }` for client-side time sync.
 
-Audio analysis results are cached in a `Map` keyed by `trackId`, bounded to 50 entries (oldest evicted first). Each cached analysis contains the track's `segments` array (with `start`, `duration`, `loudnessStart`, `loudnessMax`, `loudnessMaxTime`, `pitches[12]`, `timbre[12]` per segment), plus top-level `tempo` and `duration`.
+> **Note**: Spotify's `/audio-analysis/{trackId}` endpoint was deprecated in November 2024 and returns 403 for apps without prior usage. TuneBoss generates its spectrum visualization client-side instead (see `useAudioAnalysis.js` below).
 
 ### `server/aggregator.js` — Event hub
 
 Sits between the Spotify provider and Socket.io. It:
 
-- Wires up the four provider callbacks (`onTrackUpdate`, `onAnalysisReady`, `onPositionUpdate`, `onPlaybackStopped`) to corresponding `io.emit()` calls.
-- Caches `currentTrack` so newly connected clients can be synced immediately via `syncClient(socket)`, which sends the current track and its cached analysis.
-- Provides the `start()` / `stop()` lifecycle for the provider.
+- Wires up the provider callbacks (`onTrackUpdate`, `onPositionUpdate`, `onPlaybackStopped`) to corresponding `io.emit()` calls.
+- Caches `currentTrack` so newly connected clients can be synced immediately via `syncClient(socket)`.
+- Manages **client-gated polling**: tracks a `clientCount` and starts the Spotify provider when the first client connects, stops it when the last one disconnects. This avoids burning Spotify API quota when nobody is watching.
 
 The aggregator pattern decouples providers from the transport layer, making it straightforward to add future providers (Qobuz, YouTube Music) without changing the Socket.io plumbing.
 
@@ -83,11 +84,10 @@ Manages all application state as reactive refs:
 | `connected` | `boolean` | Socket.io connection status |
 | `authenticated` | `boolean` | Spotify auth status (fetched from `/api/auth/status`) |
 | `track` | `object \| null` | Current track metadata |
-| `analysis` | `object \| null` | Audio analysis segments |
 | `playback` | `{ position, timestamp }` | Playback position + local timestamp for interpolation |
 | `colors` | `{ bg, text }` | Dynamic theme colors from album art |
 
-Connects to Socket.io on mount with WebSocket as the primary transport (falls back to long-polling), auto-reconnection (1s initial delay, 5s max, infinite attempts). Listens for `now-playing`, `analysis-data`, `playback-position`, and `playback-stopped` events.
+Connects to Socket.io on mount with WebSocket as the primary transport (falls back to long-polling), auto-reconnection (1s initial delay, 5s max, infinite attempts). Listens for `now-playing`, `playback-position`, and `playback-stopped` events.
 
 Dynamic theming is driven by CSS custom properties (`--color-bg`, `--color-text`) with smooth transitions (1.5s on background, 1s on text color). The root `.tuneboss` container uses `100dvh` height and `env(safe-area-inset-*)` padding to handle the iPhone notch and Dynamic Island.
 
@@ -121,26 +121,32 @@ Renders 10 vertical bars on a 340x100 canvas at 60 fps via `requestAnimationFram
 - **Shape**: Rounded top corners (3px radius)
 - **Peak indicator**: White 2px line at the peak position
 
-### `useAudioAnalysis.js` — Audio data composable
+### `useAudioAnalysis.js` — Synthetic spectrum composable
 
-The core signal-processing composable that transforms Spotify's raw audio analysis into animated display bands. Inputs: `analysis` ref (segments array) and `playback` ref (position + timestamp). Outputs: reactive `bands[10]` and `peaks[10]` arrays (values 0 to 1).
+Generates procedural spectrum-analyzer visuals without any external audio analysis data. Spotify deprecated the `/audio-analysis` endpoint in November 2024, so TuneBoss produces its own visualization seeded deterministically from the Spotify track ID — each song gets a unique, consistent "personality". Inputs: `trackId` ref (string) and `playback` ref (position + timestamp). Outputs: reactive `bands[10]` and `peaks[10]` arrays (values 0 to 1).
+
+**Per-track initialization:**
+
+1. **Seed**: The track ID is hashed (`hashCode`) to produce a 32-bit integer seed.
+2. **BPM**: A seeded PRNG (mulberry32) derives a plausible tempo in the 90–150 BPM range.
+3. **Oscillators**: Each of the 10 bands gets 3 layered sinusoids with seeded frequencies (0.3–1.5 Hz), phases, and amplitude weights. This produces unique wave shapes per band per track.
 
 **Per-frame pipeline (60 fps):**
 
-1. **Position calculation**: `currentPosition = startPosition + (Date.now() - startTime) / 1000`. This interpolates smoothly between the 3-second server poll updates.
-2. **Segment lookup**: Binary search through the segments array to find the segment containing the current position.
-3. **Band computation**: Maps 12 Spotify pitch classes to 10 display bands using `PITCH_TO_BAND = [0, 0, 1, 2, 2, 3, 4, 4, 5, 6, 7, 8]`:
-   - Bands 0, 2, 4 each receive 2 pitch classes (results divided by 1.5 to normalize)
-   - Bands 1, 3, 5, 6, 7, 8 each receive 1 pitch class
-   - Band 9 is driven by `timbre[1]` (high-frequency energy), scaled by `1/200`
-   - Each pitch value is multiplied by the segment's normalized loudness: `(loudnessMax + 60) / 60`
-   - If transitioning between segments, pitch values are linearly interpolated by the progress ratio within the current segment
-4. **Smoothing**: Exponential moving average with factor 0.3: `newBand = oldBand + (computed - oldBand) * 0.3`
+1. **Position calculation**: `currentPosition = startPosition + (Date.now() - startTime) / 1000`. Interpolates smoothly between the 3-second server poll updates.
+2. **Beat pulse**: A cosine wave at the derived BPM creates a pulsing envelope. Lower bands receive a stronger beat weight (40% at band 0, tapering to 0% at band 9), giving the visualization a bass-heavy rhythmic feel.
+3. **Band computation**: Each band sums its 3 sine-wave layers (each producing values 0–1), then mixes in the beat pulse proportionally.
+4. **Smoothing**: Exponential moving average with factor 0.25: `newBand = oldBand + (computed - oldBand) * 0.25`
 5. **Peak tracking**: If a new value exceeds the current peak, the peak snaps to that value. Otherwise the peak decays by 0.015 per frame.
 
 ### `useWakeLock.js` — Screen wake lock composable
 
-Requests `navigator.wakeLock.request('screen')` on mount to prevent the iPhone from sleeping. Re-acquires the lock on `visibilitychange` events (the lock is automatically released when the tab goes to the background). Releases the lock on unmount. Falls back gracefully if the API is unavailable.
+Keeps the iPhone screen on using a two-tier strategy:
+
+1. **Native Wake Lock API** (primary): Requests `navigator.wakeLock.request('screen')` on mount. This works when the page is served over HTTPS or from localhost.
+2. **Silent video fallback** (for HTTP on local network): When the Wake Lock API is unavailable (insecure context), a hidden 1×1 `<video>` element loops a tiny silent mp4 (`public/silence.mp4`, 482 bytes). iOS treats active video playback as a reason to keep the screen on. The video requires a user gesture to start on iOS, so the composable listens for the first `touchstart` or `click` event and retries playback.
+
+Both strategies re-acquire on `visibilitychange` (iOS releases the wake lock when the tab is hidden). A 30-second `setInterval` periodically re-requests the lock as a guard against silent releases. Everything is cleaned up on unmount.
 
 ## Real-Time Communication Protocol
 
@@ -149,11 +155,10 @@ All real-time data flows through Socket.io over a single WebSocket connection.
 | Event | Direction | Payload | Trigger |
 |---|---|---|---|
 | `now-playing` | server → client | `{ source, trackId, title, artist, album, albumArt, isPlaying, position, duration }` | Track change |
-| `analysis-data` | server → client | `{ trackId, segments[], tempo, duration }` | Analysis fetched (once per track) |
 | `playback-position` | server → client | `{ position, duration }` | Every 3s poll |
 | `playback-stopped` | server → client | *(empty)* | Playback paused or stopped |
 
-**New client sync**: When a client connects, the aggregator immediately sends the current `now-playing` and `analysis-data` (if available) so the display populates instantly without waiting for the next poll cycle.
+**New client sync**: When a client connects, the aggregator immediately sends the current `now-playing` so the display populates instantly without waiting for the next poll cycle.
 
 **Reconnection**: The client is configured with `reconnectionDelay: 1000`, `reconnectionDelayMax: 5000`, and `reconnectionAttempts: Infinity`, so it will persistently try to reconnect after network interruptions.
 
@@ -176,15 +181,14 @@ All real-time data flows through Socket.io over a single WebSocket connection.
 
 | Decision | Rationale |
 |---|---|
-| **In-memory token store** | TuneBoss is a single-user appliance. No database overhead. Tokens simply re-auth on server restart. |
+| **Token persistence to disk** | Saves tokens to `.tokens.json` so the server resumes authenticated after a restart. A flat JSON file is appropriate for a single-user appliance — no database needed. |
+| **Client-gated polling** | Spotify polling only runs while at least one Socket.io client is connected. Avoids burning API quota when nobody is watching. |
+| **Procedural spectrum (no audio analysis API)** | Spotify deprecated the `/audio-analysis` endpoint in November 2024 (returns 403 for new apps). Instead, TuneBoss generates per-track visuals using a seeded PRNG keyed on the Spotify track ID — each song gets a unique, deterministic "personality" with its own BPM and oscillator shapes, without any external dependency. |
+| **Silent mp4 video for wake lock fallback** | The Screen Wake Lock API requires HTTPS, but the server runs on the local network over HTTP. A hidden looping silent video (`silence.mp4`, 482 bytes) tricks iOS into keeping the screen on. This is the standard fallback used by libraries like NoSleep.js. |
 | **Aggregator pattern** | Decouples providers from the Socket.io transport. Adding a new music service means implementing a provider class and wiring it into the aggregator — no changes to the WebSocket layer. |
-| **Client-side analysis processing** | The server sends raw analysis segments; the client computes display bands at 60 fps. This offloads CPU from the Raspberry Pi and allows smooth animation independent of the 3-second polling interval. |
 | **Canvas over SVG/DOM** | Canvas is GPU-accelerated and avoids DOM churn. Critical for smooth 60 fps animation on mobile hardware. |
 | **3-second polling interval** | Spotify's rate limit is approximately 3,600 requests/hour. A 3-second interval uses ~1,200 requests/hour, well within limits while keeping the display responsive. |
 | **node-vibrant on the client** | Color extraction runs after the image loads in the browser, avoiding server-side image decoding. The server doesn't need to fetch or process album art at all. |
-| **LRU analysis cache (50 entries)** | Bounded memory prevents unbounded growth during long-running sessions. Avoids re-fetching analysis for repeated tracks in a playlist. |
-| **Binary search for segment lookup** | Audio analysis can contain thousands of segments per track. Binary search keeps per-frame segment lookup O(log n). |
-| **Pitch-to-band grouping (12 → 10)** | 10 bars is visually cleaner than 12 on a small mobile screen. Adjacent pitch classes (e.g., C and C#) are grouped since they represent similar frequency regions. Band 9 uses timbre data for a distinct high-frequency "presence" band. |
 
 ## Deployment
 
