@@ -100,6 +100,8 @@ class SpotifyProvider {
   }
 
   async fetchAnalysis(trackId, token) {
+    if (this.analysisDisabled) return;
+
     // Check cache
     if (this.analysisCache.has(trackId)) {
       this.onAnalysisReady?.(this.analysisCache.get(trackId));
@@ -112,7 +114,15 @@ class SpotifyProvider {
       });
 
       if (!res.ok) {
-        console.warn('[spotify] Audio analysis fetch failed (%d)', res.status);
+        if (res.status === 403) {
+          console.warn(
+            '[spotify] Audio analysis endpoint returned 403 — Spotify deprecated this API in November 2024. ' +
+            'The spectrum analyzer will be unavailable. See: https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api'
+          );
+          this.analysisDisabled = true;
+        } else {
+          console.warn('[spotify] Audio analysis fetch failed (%d)', res.status);
+        }
         return;
       }
 
