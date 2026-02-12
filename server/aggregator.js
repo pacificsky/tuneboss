@@ -5,6 +5,7 @@ class Aggregator {
     this.io = io;
     this.spotify = new SpotifyProvider();
     this.currentTrack = null;
+    this.clientCount = 0;
 
     this.spotify.onTrackUpdate = (track) => {
       this.currentTrack = track;
@@ -23,13 +24,22 @@ class Aggregator {
     };
   }
 
-  start() {
-    this.spotify.start();
-    console.log('[aggregator] Started');
+  clientConnected(socket) {
+    this.clientCount++;
+    console.log('[aggregator] Client connected (%d active)', this.clientCount);
+    this.syncClient(socket);
+    if (this.clientCount === 1) {
+      this.spotify.start();
+    }
   }
 
-  stop() {
-    this.spotify.stop();
+  clientDisconnected() {
+    this.clientCount = Math.max(0, this.clientCount - 1);
+    console.log('[aggregator] Client disconnected (%d active)', this.clientCount);
+    if (this.clientCount === 0) {
+      this.spotify.stop();
+      console.log('[aggregator] No clients — paused Spotify polling');
+    }
   }
 
   // Send current state to a newly connected client

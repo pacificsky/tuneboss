@@ -41,10 +41,6 @@ function saveTokens() {
 // Load any previously saved tokens on startup
 loadTokens();
 
-function getTokenStore() {
-  return tokenStore;
-}
-
 function setupSpotifyAuth(app) {
   const clientId = process.env.SPOTIFY_CLIENT_ID;
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
@@ -181,4 +177,4 @@ async function getValidAccessToken() {
   return tokenStore.accessToken;
 }
 
-module.exports = { setupSpotifyAuth, getValidAccessToken, getTokenStore };
+module.exports = { setupSpotifyAuth, getValidAccessToken };
