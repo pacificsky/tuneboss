@@ -103,7 +103,7 @@ onUnmounted(() => {
   justify-content: space-between;
   font-size: 0.65rem;
   font-weight: 400;
-  opacity: 0.35;
+  opacity: 0.6;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
 }
