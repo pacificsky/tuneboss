@@ -4,13 +4,14 @@
       :src="track?.albumArt"
       @colors-extracted="$emit('colors-extracted', $event)"
     />
+    <TrackProgress
+      :playback="playback"
+      class="now-playing__progress"
+    />
     <TrackInfo
       :title="track?.title"
       :artist="track?.artist"
       :album="track?.album"
-    />
-    <TrackProgress
-      :playback="playback"
     />
     <SpectrumAnalyzer
       :trackId="track?.trackId"
@@ -47,6 +48,11 @@ defineEmits(['colors-extracted'])
   gap: 1.25rem;
   width: 100%;
   padding: 2rem 1.5rem;
+}
+
+.now-playing__progress {
+  margin-top: 0.75rem;
+  margin-bottom: -1rem;
 }
 
 .now-playing__source {
