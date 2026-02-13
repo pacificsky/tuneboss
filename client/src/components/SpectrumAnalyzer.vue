@@ -161,9 +161,9 @@ function draw() {
   ctx.clearRect(0, 0, canvasWidth, canvasHeight)
 
   // Ease the blend factor toward its target.
-  // When mic is listening and music is detected → blend toward 1 (real data).
-  // Otherwise → blend toward 0 (procedural).
-  const blendTarget = micDetected.value && micListening.value ? 1 : 0
+  // Mic mode is an explicit user choice — stay on mic data for the entire
+  // session, even during silence.  Music detection only drives the icon color.
+  const blendTarget = micListening.value && !micCalibrating.value ? 1 : 0
   blendFactor += (blendTarget - blendFactor) * BLEND_SPEED
   if (Math.abs(blendFactor - blendTarget) < 0.001) blendFactor = blendTarget
 
