@@ -27,8 +27,8 @@
       v-if="micSupported"
       class="mic-toggle"
       :class="{
-        'mic-toggle--listening': micListening && !micCalibrating,
-        'mic-toggle--active': micDetected
+        'mic-toggle--listening': micCalibrating,
+        'mic-toggle--active': micListening && !micCalibrating
       }"
       @click="toggleMic"
       aria-label="Toggle microphone analyzer"
