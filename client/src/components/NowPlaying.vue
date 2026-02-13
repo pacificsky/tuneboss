@@ -12,6 +12,7 @@
     <SpectrumAnalyzer
       :trackId="track?.trackId"
       :playback="playback"
+      :spectrumColors="spectrumColors"
     />
     <div class="now-playing__source">
       <span class="source-dot"></span>
@@ -27,7 +28,8 @@ import SpectrumAnalyzer from './SpectrumAnalyzer.vue'
 
 defineProps({
   track: { type: Object, default: null },
-  playback: { type: Object, default: () => ({ position: 0, timestamp: Date.now() }) }
+  playback: { type: Object, default: () => ({ position: 0, timestamp: Date.now() }) },
+  spectrumColors: { type: Object, default: null }
 })
 
 defineEmits(['colors-extracted'])
