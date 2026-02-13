@@ -27,7 +27,7 @@ const SMOOTH_FACTOR = 0.3
 // Noise floor calibration: capture N frames of ambient noise, then subtract
 // the per-bin average from all subsequent frames. The user is prompted to
 // mute speakers before calibration, so the snapshot contains only room noise.
-const CALIBRATION_FRAMES = 60 // ~1s at 60 fps
+const CALIBRATION_FRAMES = 120 // ~2s at 60 fps
 const NOISE_MARGIN = 1.3      // subtract 130% of measured noise for a clean floor
 
 // Per-band gain curve to compensate for iPhone mic's high-frequency rolloff.

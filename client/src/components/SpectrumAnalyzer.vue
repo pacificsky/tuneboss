@@ -18,6 +18,11 @@
       <p>Calibrating...</p>
     </div>
 
+    <!-- Post-calibration unmute reminder (auto-dismisses after 2s) -->
+    <div v-else-if="showUnmuteMessage" class="calibration-prompt calibration-prompt--fade">
+      <p>Unmute and play!</p>
+    </div>
+
     <button
       v-if="micSupported"
       class="mic-toggle"
@@ -37,7 +42,7 @@
 </template>
 
 <script setup>
-import { ref, toRef, onMounted, onUnmounted } from 'vue'
+import { ref, toRef, watch, onMounted, onUnmounted } from 'vue'
 import { useAudioAnalysis } from '../composables/useAudioAnalysis.js'
 import { useMicrophoneAnalyzer } from '../composables/useMicrophoneAnalyzer.js'
 
@@ -71,6 +76,17 @@ const {
 } = useMicrophoneAnalyzer()
 
 const showCalibrationPrompt = ref(false)
+const showUnmuteMessage = ref(false)
+let unmuteTimer = null
+
+// When calibration finishes, flash "Unmute and play" for 2s
+watch(micCalibrating, (calibrating, wasCalibrating) => {
+  if (wasCalibrating && !calibrating && micListening.value) {
+    showUnmuteMessage.value = true
+    clearTimeout(unmuteTimer)
+    unmuteTimer = setTimeout(() => { showUnmuteMessage.value = false }, 2000)
+  }
+})
 
 async function toggleMic() {
   if (micListening.value) {
@@ -247,6 +263,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (drawFrame) cancelAnimationFrame(drawFrame)
+  clearTimeout(unmuteTimer)
 })
 </script>
 
@@ -279,6 +296,10 @@ onUnmounted(() => {
   background: rgba(0, 0, 0, 0.85);
   border-radius: 8px;
   z-index: 1;
+}
+
+.calibration-prompt--fade {
+  animation: overlay-fade 2s ease forwards;
 }
 
 .calibration-prompt p {
@@ -343,6 +364,12 @@ onUnmounted(() => {
   background: rgba(29, 185, 84, 0.2);
   color: rgba(29, 185, 84, 0.9);
   animation: none;
+}
+
+@keyframes overlay-fade {
+  0%   { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; pointer-events: none; }
 }
 
 @keyframes mic-pulse {
