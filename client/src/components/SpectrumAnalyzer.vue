@@ -5,12 +5,28 @@
       :width="canvasWidth"
       :height="canvasHeight"
     ></canvas>
+    <button
+      v-if="micSupported"
+      class="mic-toggle"
+      :class="{
+        'mic-toggle--listening': micListening,
+        'mic-toggle--active': micDetected
+      }"
+      @click="toggleMic"
+      aria-label="Toggle microphone analyzer"
+    >
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+      </svg>
+    </button>
   </div>
 </template>
 
 <script setup>
-import { ref, toRef, onMounted, onUnmounted, watch } from 'vue'
+import { ref, toRef, onMounted, onUnmounted } from 'vue'
 import { useAudioAnalysis } from '../composables/useAudioAnalysis.js'
+import { useMicrophoneAnalyzer } from '../composables/useMicrophoneAnalyzer.js'
 
 const props = defineProps({
   trackId: { type: String, default: null },
@@ -22,10 +38,30 @@ const canvasRef = ref(null)
 const canvasWidth = 340
 const canvasHeight = 100
 
+// Procedural spectrum (existing — always runs as fallback)
 const { bands, peaks } = useAudioAnalysis(
   toRef(props, 'trackId'),
   toRef(props, 'playback')
 )
+
+// Microphone-based real spectrum
+const {
+  isSupported: micSupported,
+  isListening: micListening,
+  isMusicDetected: micDetected,
+  bands: micBands,
+  peaks: micPeaks,
+  start: micStart,
+  stop: micStop
+} = useMicrophoneAnalyzer()
+
+async function toggleMic() {
+  if (micListening.value) {
+    micStop()
+  } else {
+    await micStart()
+  }
+}
 
 const NUM_BANDS = 10
 const BAR_GAP = 4
@@ -38,6 +74,10 @@ const DEFAULT_LIGHT = [100, 255, 255]
 const DEFAULT_HOT = [255, 50, 50]
 
 let drawFrame = null
+
+// Crossfade blend factor: 0 = procedural, 1 = microphone
+let blendFactor = 0
+const BLEND_SPEED = 0.04 // ~25 frames (~0.4s) for full transition
 
 // Interpolate between two RGB arrays
 function lerpRgb(a, b, t) {
@@ -84,6 +124,13 @@ function draw() {
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight)
 
+  // Ease the blend factor toward its target.
+  // When mic is listening and music is detected → blend toward 1 (real data).
+  // Otherwise → blend toward 0 (procedural).
+  const blendTarget = micDetected.value && micListening.value ? 1 : 0
+  blendFactor += (blendTarget - blendFactor) * BLEND_SPEED
+  if (Math.abs(blendFactor - blendTarget) < 0.001) blendFactor = blendTarget
+
   // Resolve colors from album art or use defaults
   const sc = props.spectrumColors
   const primary = sc ? sc.primary : DEFAULT_PRIMARY
@@ -97,8 +144,15 @@ function draw() {
 
   for (let i = 0; i < NUM_BANDS; i++) {
     const x = i * (barWidth + BAR_GAP)
-    const bandVal = Math.min(1, bands.value[i] || 0)
-    const peakVal = Math.min(1, peaks.value[i] || 0)
+
+    // Blend procedural and microphone band/peak values
+    const procBand = bands.value[i] || 0
+    const micBand = micBands.value[i] || 0
+    const bandVal = Math.min(1, procBand * (1 - blendFactor) + micBand * blendFactor)
+
+    const procPeak = peaks.value[i] || 0
+    const micPeak = micPeaks.value[i] || 0
+    const peakVal = Math.min(1, procPeak * (1 - blendFactor) + micPeak * blendFactor)
 
     const litSegments = Math.round(bandVal * totalSegments)
     const peakSegment = Math.round(peakVal * totalSegments)
@@ -165,10 +219,49 @@ onUnmounted(() => {
   width: 100%;
   max-width: 340px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .spectrum-analyzer canvas {
   display: block;
+}
+
+.mic-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: background 0.3s ease, color 0.3s ease;
+  -webkit-tap-highlight-color: transparent;
+  padding: 0;
+}
+
+.mic-toggle:active {
+  transform: scale(0.9);
+}
+
+.mic-toggle--listening {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.5);
+  animation: mic-pulse 2s ease infinite;
+}
+
+.mic-toggle--active {
+  background: rgba(29, 185, 84, 0.2);
+  color: rgba(29, 185, 84, 0.9);
+  animation: none;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 </style>

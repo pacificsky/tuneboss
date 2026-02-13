@@ -139,6 +139,32 @@ Generates procedural spectrum-analyzer visuals without any external audio analys
 4. **Smoothing**: Exponential moving average with factor 0.25: `newBand = oldBand + (computed - oldBand) * 0.25`
 5. **Peak tracking**: If a new value exceeds the current peak, the peak snaps to that value. Otherwise the peak decays by 0.015 per frame.
 
+### `useMicrophoneAnalyzer.js` — Real-time microphone spectrum composable
+
+Uses the device microphone to capture ambient audio (music playing from nearby speakers) and produces real FFT-based spectrum data. This replaces the procedural visualization with actual frequency analysis when music is detected.
+
+**Requires**: HTTPS or localhost (secure context) for `getUserMedia`. On a LAN deployment, use a self-signed certificate or a tunnel (e.g., Tailscale, Cloudflare Tunnel) to satisfy this requirement.
+
+**User activation**: A microphone toggle button appears below the spectrum analyzer. The user taps it to grant microphone permission (the tap also satisfies iOS's requirement for a user gesture before creating an `AudioContext`).
+
+**Web Audio pipeline**: `getUserMedia({ audio })` → `MediaStreamSource` → `AnalyserNode` (FFT size 2048). Audio constraints disable `echoCancellation`, `noiseSuppression`, and `autoGainControl` to get the rawest possible signal for spectrum analysis. The analyser is intentionally NOT connected to the audio destination to avoid feedback.
+
+**FFT → 10 bands**: The 1024 FFT frequency bins are mapped to 10 perceptual bands using logarithmic band edges (20–60–150–300–600–1200–2400–4800–8000–14000–20000 Hz). Each band averages the FFT magnitudes of the bins in its range.
+
+**Auto-normalization**: A running-maximum normalizer with fast attack (0.12) and slow decay (0.0008) adapts to varying microphone levels. This ensures the visualization fills the visual range regardless of distance from speakers or room acoustics. A minimum floor (30) prevents amplifying silence.
+
+**Music detection**: Energy-based detection without audio fingerprinting. Each frame checks: (1) average energy across all bands exceeds a threshold, and (2) at least 4 bands are active (distinguishes music from noise or speech). A confidence counter must reach 30 consecutive frames (~0.5s) before the analyzer reports "music detected." This filters transient sounds like door slams or coughs.
+
+**Crossfade blending** (in `SpectrumAnalyzer.vue`): A blend factor eases between 0 (procedural) and 1 (microphone) at ~0.4s. The final rendered band value is `procedural * (1 - blend) + mic * blend`. When mic stops or music is no longer detected, the blend eases back to procedural. The mic composable intentionally preserves its last band values on stop so the crossfade is smooth rather than jarring.
+
+**Three mic button states**:
+
+| State | Appearance | Meaning |
+|-------|-----------|---------|
+| Off | Dim mic icon (30% opacity) | Not listening |
+| Listening | Pulsing mic icon (50% opacity) | Mic active, waiting for music |
+| Active | Green mic icon (Spotify green) | Music detected, real spectrum data driving visualization |
+
 ### `useWakeLock.js` — Screen wake lock composable
 
 Keeps the iPhone screen on using a two-tier strategy:
@@ -189,6 +215,8 @@ All real-time data flows through Socket.io over a single WebSocket connection.
 | **Canvas over SVG/DOM** | Canvas is GPU-accelerated and avoids DOM churn. Critical for smooth 60 fps animation on mobile hardware. |
 | **3-second polling interval** | Spotify's rate limit is approximately 3,600 requests/hour. A 3-second interval uses ~1,200 requests/hour, well within limits while keeping the display responsive. |
 | **node-vibrant on the client** | Color extraction runs after the image loads in the browser, avoiding server-side image decoding. The server doesn't need to fetch or process album art at all. |
+| **Microphone spectrum (no library)** | The mic analyzer uses raw Web Audio API (`getUserMedia` → `AnalyserNode` → `getByteFrequencyData`) rather than a library like audioMotion-analyzer. The core pipeline is ~80 lines of code; a library would add ~20KB for features we'd never use (240 band modes, radial viz, weighting filters) while managing its own AudioContext and animation loop that conflicts with our existing architecture. |
+| **Energy-based music detection** | Detects music via sustained spectral energy across multiple bands rather than audio fingerprinting. Since we already know the playing track from Spotify's API, we only need to confirm "is the mic hearing music?" — not identify which song it is. Energy detection is simple, reliable, and requires no server-side processing. |
 
 ## Deployment
 
