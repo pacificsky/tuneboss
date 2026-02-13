@@ -51,8 +51,8 @@ defineEmits(['colors-extracted'])
 }
 
 .now-playing__progress {
-  margin-top: 0.5rem;
-  margin-bottom: -0.5rem;
+  margin-top: 0.75rem;
+  margin-bottom: -1rem;
 }
 
 .now-playing__source {
