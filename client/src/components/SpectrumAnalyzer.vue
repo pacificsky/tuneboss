@@ -5,12 +5,46 @@
       :width="canvasWidth"
       :height="canvasHeight"
     ></canvas>
+
+    <!-- Calibration prompt overlay -->
+    <div v-if="showCalibrationPrompt" class="calibration-prompt">
+      <p>Mute speakers, then tap to calibrate</p>
+      <button class="calibration-btn" @click="onCalibrate">Calibrate</button>
+      <button class="calibration-cancel" @click="onCancelCalibration">Cancel</button>
+    </div>
+
+    <!-- Calibrating indicator -->
+    <div v-else-if="micCalibrating" class="calibration-prompt">
+      <p>Calibrating...</p>
+    </div>
+
+    <!-- Post-calibration unmute reminder (auto-dismisses after 2s) -->
+    <div v-else-if="showUnmuteMessage" class="calibration-prompt calibration-prompt--fade">
+      <p>Unmute and play!</p>
+    </div>
+
+    <button
+      v-if="micSupported"
+      class="mic-toggle"
+      :class="{
+        'mic-toggle--listening': micCalibrating,
+        'mic-toggle--active': micListening && !micCalibrating
+      }"
+      @click="toggleMic"
+      aria-label="Toggle microphone analyzer"
+    >
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+      </svg>
+    </button>
   </div>
 </template>
 
 <script setup>
-import { ref, toRef, onMounted, onUnmounted, watch } from 'vue'
+import { ref, toRef, watch, onMounted, onUnmounted } from 'vue'
 import { useAudioAnalysis } from '../composables/useAudioAnalysis.js'
+import { useMicrophoneAnalyzer } from '../composables/useMicrophoneAnalyzer.js'
 
 const props = defineProps({
   trackId: { type: String, default: null },
@@ -22,10 +56,64 @@ const canvasRef = ref(null)
 const canvasWidth = 340
 const canvasHeight = 100
 
+// Procedural spectrum (existing — always runs as fallback)
 const { bands, peaks } = useAudioAnalysis(
   toRef(props, 'trackId'),
   toRef(props, 'playback')
 )
+
+// Microphone-based real spectrum
+const {
+  isSupported: micSupported,
+  isListening: micListening,
+  isCalibrating: micCalibrating,
+  isMusicDetected: micDetected,
+  bands: micBands,
+  peaks: micPeaks,
+  start: micStart,
+  calibrate: micCalibrate,
+  stop: micStop
+} = useMicrophoneAnalyzer()
+
+const showCalibrationPrompt = ref(false)
+const showUnmuteMessage = ref(false)
+let unmuteTimer = null
+
+// When calibration finishes, flash "Unmute and play" for 2s
+watch(micCalibrating, (calibrating, wasCalibrating) => {
+  if (wasCalibrating && !calibrating && micListening.value) {
+    showUnmuteMessage.value = true
+    clearTimeout(unmuteTimer)
+    unmuteTimer = setTimeout(() => { showUnmuteMessage.value = false }, 2000)
+  }
+})
+
+async function toggleMic() {
+  if (micListening.value) {
+    // Already listening — stop
+    micStop()
+    showCalibrationPrompt.value = false
+  } else if (showCalibrationPrompt.value) {
+    // Prompt is showing — cancel
+    showCalibrationPrompt.value = false
+  } else {
+    // First tap: acquire mic permission, then show calibration prompt
+    const granted = await micStart()
+    if (granted) {
+      showCalibrationPrompt.value = true
+    }
+  }
+}
+
+function onCalibrate() {
+  showCalibrationPrompt.value = false
+  micCalibrate()
+}
+
+function onCancelCalibration() {
+  showCalibrationPrompt.value = false
+  micStop()
+}
 
 const NUM_BANDS = 10
 const BAR_GAP = 4
@@ -38,6 +126,10 @@ const DEFAULT_LIGHT = [100, 255, 255]
 const DEFAULT_HOT = [255, 50, 50]
 
 let drawFrame = null
+
+// Crossfade blend factor: 0 = procedural, 1 = microphone
+let blendFactor = 0
+const BLEND_SPEED = 0.04 // ~25 frames (~0.4s) for full transition
 
 // Interpolate between two RGB arrays
 function lerpRgb(a, b, t) {
@@ -84,6 +176,13 @@ function draw() {
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight)
 
+  // Ease the blend factor toward its target.
+  // Mic mode is an explicit user choice — stay on mic data for the entire
+  // session, even during silence.  Music detection only drives the icon color.
+  const blendTarget = micListening.value && !micCalibrating.value ? 1 : 0
+  blendFactor += (blendTarget - blendFactor) * BLEND_SPEED
+  if (Math.abs(blendFactor - blendTarget) < 0.001) blendFactor = blendTarget
+
   // Resolve colors from album art or use defaults
   const sc = props.spectrumColors
   const primary = sc ? sc.primary : DEFAULT_PRIMARY
@@ -97,8 +196,15 @@ function draw() {
 
   for (let i = 0; i < NUM_BANDS; i++) {
     const x = i * (barWidth + BAR_GAP)
-    const bandVal = Math.min(1, bands.value[i] || 0)
-    const peakVal = Math.min(1, peaks.value[i] || 0)
+
+    // Blend procedural and microphone band/peak values
+    const procBand = bands.value[i] || 0
+    const micBand = micBands.value[i] || 0
+    const bandVal = Math.min(1, procBand * (1 - blendFactor) + micBand * blendFactor)
+
+    const procPeak = peaks.value[i] || 0
+    const micPeak = micPeaks.value[i] || 0
+    const peakVal = Math.min(1, procPeak * (1 - blendFactor) + micPeak * blendFactor)
 
     const litSegments = Math.round(bandVal * totalSegments)
     const peakSegment = Math.round(peakVal * totalSegments)
@@ -157,6 +263,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (drawFrame) cancelAnimationFrame(drawFrame)
+  clearTimeout(unmuteTimer)
 })
 </script>
 
@@ -165,10 +272,108 @@ onUnmounted(() => {
   width: 100%;
   max-width: 340px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
 }
 
 .spectrum-analyzer canvas {
   display: block;
+}
+
+.calibration-prompt {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: rgba(0, 0, 0, 0.85);
+  border-radius: 8px;
+  z-index: 1;
+}
+
+.calibration-prompt--fade {
+  animation: overlay-fade 2s ease forwards;
+}
+
+.calibration-prompt p {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  margin: 0;
+  text-align: center;
+}
+
+.calibration-btn {
+  background: rgba(29, 185, 84, 0.3);
+  color: rgba(29, 185, 84, 1);
+  border: 1px solid rgba(29, 185, 84, 0.4);
+  border-radius: 16px;
+  padding: 6px 20px;
+  font-size: 13px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.calibration-btn:active {
+  transform: scale(0.95);
+}
+
+.calibration-cancel {
+  background: none;
+  color: rgba(255, 255, 255, 0.4);
+  border: none;
+  padding: 4px 12px;
+  font-size: 11px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mic-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: background 0.3s ease, color 0.3s ease;
+  -webkit-tap-highlight-color: transparent;
+  padding: 0;
+}
+
+.mic-toggle:active {
+  transform: scale(0.9);
+}
+
+.mic-toggle--listening {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.5);
+  animation: mic-pulse 2s ease infinite;
+}
+
+.mic-toggle--active {
+  background: rgba(29, 185, 84, 0.2);
+  color: rgba(29, 185, 84, 0.9);
+  animation: none;
+}
+
+@keyframes overlay-fade {
+  0%   { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; pointer-events: none; }
+}
+
+@keyframes mic-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 </style>
