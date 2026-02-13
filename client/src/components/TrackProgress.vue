@@ -1,7 +1,9 @@
 <template>
   <div class="track-progress">
     <div class="track-progress__bar">
-      <div class="track-progress__fill" :style="{ width: progressPercent + '%' }"></div>
+      <div class="track-progress__fill" :style="{ width: progressPercent + '%' }">
+        <span class="track-progress__dot"></span>
+      </div>
     </div>
     <div class="track-progress__times">
       <span>{{ elapsedFormatted }}</span>
@@ -73,7 +75,7 @@ onUnmounted(() => {
   height: 3px;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 1.5px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .track-progress__fill {
@@ -81,6 +83,19 @@ onUnmounted(() => {
   background: currentColor;
   opacity: 0.5;
   border-radius: 1.5px;
+  position: relative;
+}
+
+.track-progress__dot {
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 1;
 }
 
 .track-progress__times {

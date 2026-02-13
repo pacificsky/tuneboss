@@ -4,13 +4,13 @@
       :src="track?.albumArt"
       @colors-extracted="$emit('colors-extracted', $event)"
     />
+    <TrackProgress
+      :playback="playback"
+    />
     <TrackInfo
       :title="track?.title"
       :artist="track?.artist"
       :album="track?.album"
-    />
-    <TrackProgress
-      :playback="playback"
     />
     <SpectrumAnalyzer
       :trackId="track?.trackId"
