@@ -35,7 +35,7 @@ useWakeLock()
 const connected = ref(false)
 const authenticated = ref(false)
 const track = ref(null)
-const playback = ref({ position: 0, timestamp: Date.now() })
+const playback = ref({ position: 0, duration: 0, timestamp: Date.now() })
 const colors = ref({ bg: '#121212', text: '#ffffff' })
 const spectrumColors = ref(null)
 
@@ -90,7 +90,7 @@ onMounted(() => {
   })
 
   socket.on('playback-position', (data) => {
-    playback.value = { position: data.position, timestamp: Date.now() }
+    playback.value = { position: data.position, duration: data.duration, timestamp: Date.now() }
   })
 
   socket.on('playback-stopped', () => {

@@ -50,17 +50,29 @@ function buildBandOscillators(seed) {
   return oscillators
 }
 
+// Smoothstep easing — gentle start and end
+function smoothstep(t) {
+  t = Math.max(0, Math.min(1, t))
+  return t * t * (3 - 2 * t)
+}
+
+const FADE_IN_DURATION = 1.5  // seconds to ramp up on new track
+const FADE_OUT_WINDOW = 5     // seconds before track end to start fading
+
 export function useAudioAnalysis(trackId, playback) {
   const bands = ref(new Array(NUM_BANDS).fill(0))
   const peaks = ref(new Array(NUM_BANDS).fill(0))
+  const fade = ref(1)
   let animFrame = null
   let startTime = 0
   let startPosition = 0
+  let duration = 0
 
   // Per-track state
   let bpm = 120
   let oscillators = []
   let beatPhase = 0
+  let fadeInStart = 0
 
   function applyTrack(id) {
     if (!id) return
@@ -68,10 +80,28 @@ export function useAudioAnalysis(trackId, playback) {
     bpm = deriveTempo(seed)
     oscillators = buildBandOscillators(seed)
     beatPhase = (seed & 0xff) / 255 * Math.PI * 2
+    fadeInStart = Date.now()
   }
 
   function getCurrentPosition() {
     return startPosition + (Date.now() - startTime) / 1000
+  }
+
+  function computeFade(positionSec) {
+    // Fade-in: ramp 0→1 over FADE_IN_DURATION after track change
+    const fadeInElapsed = (Date.now() - fadeInStart) / 1000
+    const fadeIn = smoothstep(Math.min(1, fadeInElapsed / FADE_IN_DURATION))
+
+    // Fade-out: ramp 1→0 in last FADE_OUT_WINDOW seconds of the track
+    let fadeOut = 1
+    if (duration > 0) {
+      const remaining = duration - positionSec
+      if (remaining < FADE_OUT_WINDOW) {
+        fadeOut = smoothstep(Math.max(0, remaining / FADE_OUT_WINDOW))
+      }
+    }
+
+    return fadeIn * fadeOut
   }
 
   const PEAK_DECAY = 0.015
@@ -84,6 +114,9 @@ export function useAudioAnalysis(trackId, playback) {
     }
 
     const t = getCurrentPosition()
+    const currentFade = computeFade(t)
+    fade.value = currentFade
+
     const beatInterval = 60 / bpm
     // Pulsing envelope synced to the derived BPM
     const beatT = ((t / beatInterval) + beatPhase) % 1
@@ -100,7 +133,9 @@ export function useAudioAnalysis(trackId, playback) {
       // Mix in the beat pulse — lower bands feel it more
       const beatWeight = 0.4 * (1 - b / NUM_BANDS)
       val = val * (1 - beatWeight) + beatPulse * beatWeight
-      computed[b] = Math.max(0, Math.min(1, val))
+      // Apply fade multiplier so bars wind down near track end
+      // and ramp up on new track start
+      computed[b] = Math.max(0, Math.min(1, val)) * currentFade
     }
 
     const curBands = bands.value
@@ -126,6 +161,7 @@ export function useAudioAnalysis(trackId, playback) {
     if (p) {
       startPosition = (p.position || 0) / 1000
       startTime = p.timestamp || Date.now()
+      if (p.duration) duration = p.duration / 1000
     }
   }, { immediate: true })
 
@@ -135,5 +171,5 @@ export function useAudioAnalysis(trackId, playback) {
     if (animFrame) cancelAnimationFrame(animFrame)
   })
 
-  return { bands, peaks }
+  return { bands, peaks, fade }
 }
