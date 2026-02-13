@@ -9,6 +9,9 @@
       :artist="track?.artist"
       :album="track?.album"
     />
+    <TrackProgress
+      :playback="playback"
+    />
     <SpectrumAnalyzer
       :trackId="track?.trackId"
       :playback="playback"
@@ -24,6 +27,7 @@
 <script setup>
 import AlbumArt from './AlbumArt.vue'
 import TrackInfo from './TrackInfo.vue'
+import TrackProgress from './TrackProgress.vue'
 import SpectrumAnalyzer from './SpectrumAnalyzer.vue'
 
 defineProps({
