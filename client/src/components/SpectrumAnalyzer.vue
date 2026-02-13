@@ -5,11 +5,24 @@
       :width="canvasWidth"
       :height="canvasHeight"
     ></canvas>
+
+    <!-- Calibration prompt overlay -->
+    <div v-if="showCalibrationPrompt" class="calibration-prompt">
+      <p>Mute speakers, then tap to calibrate</p>
+      <button class="calibration-btn" @click="onCalibrate">Calibrate</button>
+      <button class="calibration-cancel" @click="onCancelCalibration">Cancel</button>
+    </div>
+
+    <!-- Calibrating indicator -->
+    <div v-else-if="micCalibrating" class="calibration-prompt">
+      <p>Calibrating...</p>
+    </div>
+
     <button
       v-if="micSupported"
       class="mic-toggle"
       :class="{
-        'mic-toggle--listening': micListening,
+        'mic-toggle--listening': micListening && !micCalibrating,
         'mic-toggle--active': micDetected
       }"
       @click="toggleMic"
@@ -48,19 +61,42 @@ const { bands, peaks } = useAudioAnalysis(
 const {
   isSupported: micSupported,
   isListening: micListening,
+  isCalibrating: micCalibrating,
   isMusicDetected: micDetected,
   bands: micBands,
   peaks: micPeaks,
   start: micStart,
+  calibrate: micCalibrate,
   stop: micStop
 } = useMicrophoneAnalyzer()
 
+const showCalibrationPrompt = ref(false)
+
 async function toggleMic() {
   if (micListening.value) {
+    // Already listening — stop
     micStop()
+    showCalibrationPrompt.value = false
+  } else if (showCalibrationPrompt.value) {
+    // Prompt is showing — cancel
+    showCalibrationPrompt.value = false
   } else {
-    await micStart()
+    // First tap: acquire mic permission, then show calibration prompt
+    const granted = await micStart()
+    if (granted) {
+      showCalibrationPrompt.value = true
+    }
   }
+}
+
+function onCalibrate() {
+  showCalibrationPrompt.value = false
+  micCalibrate()
+}
+
+function onCancelCalibration() {
+  showCalibrationPrompt.value = false
+  micStop()
 }
 
 const NUM_BANDS = 10
@@ -222,10 +258,59 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
+  position: relative;
 }
 
 .spectrum-analyzer canvas {
   display: block;
+}
+
+.calibration-prompt {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: rgba(0, 0, 0, 0.85);
+  border-radius: 8px;
+  z-index: 1;
+}
+
+.calibration-prompt p {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  margin: 0;
+  text-align: center;
+}
+
+.calibration-btn {
+  background: rgba(29, 185, 84, 0.3);
+  color: rgba(29, 185, 84, 1);
+  border: 1px solid rgba(29, 185, 84, 0.4);
+  border-radius: 16px;
+  padding: 6px 20px;
+  font-size: 13px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.calibration-btn:active {
+  transform: scale(0.95);
+}
+
+.calibration-cancel {
+  background: none;
+  color: rgba(255, 255, 255, 0.4);
+  border: none;
+  padding: 4px 12px;
+  font-size: 11px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .mic-toggle {

@@ -24,15 +24,14 @@ const NORM_MIN = 30 // floor to avoid amplifying silence
 const PEAK_DECAY = 0.015
 const SMOOTH_FACTOR = 0.3
 
-// Noise floor calibration: capture N frames of ambient noise on startup,
-// then subtract the per-bin average from all subsequent frames.
-const CALIBRATION_FRAMES = 45 // ~0.75s at 60 fps
+// Noise floor calibration: capture N frames of ambient noise, then subtract
+// the per-bin average from all subsequent frames. The user is prompted to
+// mute speakers before calibration, so the snapshot contains only room noise.
+const CALIBRATION_FRAMES = 60 // ~1s at 60 fps
 const NOISE_MARGIN = 1.3      // subtract 130% of measured noise for a clean floor
 
 // Per-band gain curve to compensate for iPhone mic's high-frequency rolloff.
 // Lower bands (0–3) get no boost; upper bands (7–9) get progressively more.
-// Values tuned empirically — enough to show cymbal/hi-hat energy without
-// amplifying noise in bands where no signal exists.
 const BAND_GAIN = [1.0, 1.0, 1.0, 1.0, 1.1, 1.3, 1.6, 2.0, 2.5, 3.0]
 
 export function useMicrophoneAnalyzer() {
@@ -42,6 +41,7 @@ export function useMicrophoneAnalyzer() {
     typeof navigator.mediaDevices.getUserMedia === 'function'
   )
   const isListening = ref(false)
+  const isCalibrating = ref(false)
   const isMusicDetected = ref(false)
   const bands = ref(new Array(NUM_BANDS).fill(0))
   const peaks = ref(new Array(NUM_BANDS).fill(0))
@@ -56,11 +56,11 @@ export function useMicrophoneAnalyzer() {
   let confidenceCounter = 0
   let normMax = NORM_MIN
 
-  // Noise floor calibration state
-  let isCalibrating = false
+  // Noise floor state
+  let calibrating = false
   let calibrationCount = 0
-  let calibrationAccum = null // Float64Array accumulating per-bin sums
-  let noiseFloor = null       // Uint8Array of per-bin noise floor values
+  let calibrationAccum = null
+  let noiseFloor = null // per-band noise floor values (post-aggregation)
 
   // Convert Hz band edges to FFT bin indices based on actual sample rate
   function calculateBandRanges(sampleRate) {
@@ -74,6 +74,18 @@ export function useMicrophoneAnalyzer() {
     return ranges
   }
 
+  // Aggregate raw FFT bins into a single band average
+  function bandAverage(bandIndex) {
+    const { low, high } = bandBinRanges[bandIndex]
+    let sum = 0
+    let count = 0
+    for (let bin = low; bin <= high; bin++) {
+      sum += frequencyData[bin]
+      count++
+    }
+    return count > 0 ? sum / count : 0
+  }
+
   function animate() {
     if (!analyser || !frequencyData) {
       animFrame = requestAnimationFrame(animate)
@@ -82,26 +94,24 @@ export function useMicrophoneAnalyzer() {
 
     analyser.getByteFrequencyData(frequencyData)
 
-    // --- Noise floor calibration phase ---
-    if (isCalibrating) {
-      for (let i = 0; i < frequencyData.length; i++) {
-        calibrationAccum[i] += frequencyData[i]
+    // --- Calibration phase: accumulate per-band averages ---
+    if (calibrating) {
+      for (let b = 0; b < NUM_BANDS; b++) {
+        calibrationAccum[b] += bandAverage(b)
       }
       calibrationCount++
 
       if (calibrationCount >= CALIBRATION_FRAMES) {
-        // Compute per-bin noise floor (average × margin)
-        noiseFloor = new Uint8Array(frequencyData.length)
-        for (let i = 0; i < frequencyData.length; i++) {
-          noiseFloor[i] = Math.min(255,
-            Math.round((calibrationAccum[i] / calibrationCount) * NOISE_MARGIN)
-          )
+        noiseFloor = new Array(NUM_BANDS)
+        for (let b = 0; b < NUM_BANDS; b++) {
+          noiseFloor[b] = (calibrationAccum[b] / calibrationCount) * NOISE_MARGIN
         }
-        isCalibrating = false
+        calibrating = false
+        isCalibrating.value = false
         calibrationAccum = null
       }
 
-      // During calibration, output silence (bars stay at zero)
+      // During calibration, output silence
       animFrame = requestAnimationFrame(animate)
       return
     }
@@ -112,22 +122,12 @@ export function useMicrophoneAnalyzer() {
     let activeBandCount = 0
 
     for (let b = 0; b < NUM_BANDS; b++) {
-      const { low, high } = bandBinRanges[b]
-      let sum = 0
-      let count = 0
-      for (let bin = low; bin <= high; bin++) {
-        // Subtract per-bin noise floor, clamp to zero
-        const cleaned = noiseFloor
-          ? Math.max(0, frequencyData[bin] - noiseFloor[bin])
-          : frequencyData[bin]
-        sum += cleaned
-        count++
-      }
-      const avg = count > 0 ? sum / count : 0
-      // Apply per-band gain to compensate for mic rolloff at high frequencies
-      rawBands[b] = avg * BAND_GAIN[b]
-      totalEnergy += rawBands[b]
-      if (rawBands[b] > 20) activeBandCount++
+      const avg = bandAverage(b)
+      const floor = noiseFloor ? noiseFloor[b] : 0
+      const cleaned = Math.max(0, avg - floor) * BAND_GAIN[b]
+      rawBands[b] = cleaned
+      totalEnergy += cleaned
+      if (cleaned > 20) activeBandCount++
     }
 
     // Auto-normalization: track a running maximum with fast attack / slow decay
@@ -175,12 +175,12 @@ export function useMicrophoneAnalyzer() {
     animFrame = requestAnimationFrame(animate)
   }
 
+  // Opens mic and gets permission, but does NOT start the animation loop yet.
+  // Returns true if mic access was granted.
   async function start() {
     if (!isSupported.value) return false
 
     try {
-      // Request raw mic input — disable all processing so the FFT
-      // reflects the actual acoustic signal, not a cleaned-up version
       mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
@@ -190,7 +190,7 @@ export function useMicrophoneAnalyzer() {
       })
 
       audioContext = new (window.AudioContext || window.webkitAudioContext)()
-      await audioContext.resume() // required on iOS — must follow user gesture
+      await audioContext.resume()
 
       sourceNode = audioContext.createMediaStreamSource(mediaStream)
       analyser = audioContext.createAnalyser()
@@ -198,27 +198,37 @@ export function useMicrophoneAnalyzer() {
       analyser.smoothingTimeConstant = 0.75
 
       sourceNode.connect(analyser)
-      // Intentionally NOT connecting to destination — we don't want to
-      // play the mic audio through the speakers (feedback loop)
 
       frequencyData = new Uint8Array(analyser.frequencyBinCount)
       bandBinRanges = calculateBandRanges(audioContext.sampleRate)
-
-      // Begin noise floor calibration: accumulate ambient noise for ~0.75s
-      isCalibrating = true
-      calibrationCount = 0
-      calibrationAccum = new Float64Array(analyser.frequencyBinCount)
-      noiseFloor = null
 
       confidenceCounter = 0
       normMax = NORM_MIN
       isListening.value = true
 
-      animFrame = requestAnimationFrame(animate)
       return true
     } catch (err) {
       console.warn('Microphone access failed:', err)
       return false
+    }
+  }
+
+  // Begin noise-floor calibration. The caller is responsible for ensuring
+  // speakers are muted before calling this. After ~1s of sampling, the
+  // animation loop starts automatically.
+  function calibrate() {
+    if (!analyser || !frequencyData) return
+
+    calibrating = true
+    isCalibrating.value = true
+    calibrationCount = 0
+    calibrationAccum = new Array(NUM_BANDS).fill(0)
+    noiseFloor = null
+
+    // Start animation loop — it will run calibration, then seamlessly
+    // transition to normal processing once calibration completes.
+    if (!animFrame) {
+      animFrame = requestAnimationFrame(animate)
     }
   }
 
@@ -242,10 +252,11 @@ export function useMicrophoneAnalyzer() {
     }
     frequencyData = null
     isListening.value = false
+    isCalibrating.value = false
     isMusicDetected.value = false
     confidenceCounter = 0
     normMax = NORM_MIN
-    isCalibrating = false
+    calibrating = false
     calibrationCount = 0
     calibrationAccum = null
     noiseFloor = null
@@ -259,10 +270,12 @@ export function useMicrophoneAnalyzer() {
   return {
     isSupported,
     isListening,
+    isCalibrating,
     isMusicDetected,
     bands,
     peaks,
     start,
+    calibrate,
     stop
   }
 }
