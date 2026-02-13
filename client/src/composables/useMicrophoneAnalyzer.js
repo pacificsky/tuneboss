@@ -9,7 +9,7 @@ const BAND_EDGES = [20, 60, 150, 300, 600, 1200, 2400, 4800, 8000, 14000, 20000]
 
 // Music detection: we look for sustained energy spread across multiple bands.
 // Pure noise or a single transient (door slam) won't trigger this.
-const ENERGY_THRESHOLD = 12   // min average energy (0–255 byte scale) to count as "audio present"
+const ENERGY_THRESHOLD = 12   // min average energy (0–255 byte scale) after noise subtraction
 const SPREAD_THRESHOLD = 4    // min number of active bands for "music" vs "noise/speech"
 const CONFIDENCE_BUILD = 30   // frames of consistent detection → "confident" (~0.5s at 60 fps)
 const CONFIDENCE_DECAY_RATE = 2
@@ -23,6 +23,17 @@ const NORM_MIN = 30 // floor to avoid amplifying silence
 
 const PEAK_DECAY = 0.015
 const SMOOTH_FACTOR = 0.3
+
+// Noise floor calibration: capture N frames of ambient noise on startup,
+// then subtract the per-bin average from all subsequent frames.
+const CALIBRATION_FRAMES = 45 // ~0.75s at 60 fps
+const NOISE_MARGIN = 1.3      // subtract 130% of measured noise for a clean floor
+
+// Per-band gain curve to compensate for iPhone mic's high-frequency rolloff.
+// Lower bands (0–3) get no boost; upper bands (7–9) get progressively more.
+// Values tuned empirically — enough to show cymbal/hi-hat energy without
+// amplifying noise in bands where no signal exists.
+const BAND_GAIN = [1.0, 1.0, 1.0, 1.0, 1.1, 1.3, 1.6, 2.0, 2.5, 3.0]
 
 export function useMicrophoneAnalyzer() {
   const isSupported = ref(
@@ -45,6 +56,12 @@ export function useMicrophoneAnalyzer() {
   let confidenceCounter = 0
   let normMax = NORM_MIN
 
+  // Noise floor calibration state
+  let isCalibrating = false
+  let calibrationCount = 0
+  let calibrationAccum = null // Float64Array accumulating per-bin sums
+  let noiseFloor = null       // Uint8Array of per-bin noise floor values
+
   // Convert Hz band edges to FFT bin indices based on actual sample rate
   function calculateBandRanges(sampleRate) {
     const binHz = sampleRate / FFT_SIZE
@@ -65,7 +82,31 @@ export function useMicrophoneAnalyzer() {
 
     analyser.getByteFrequencyData(frequencyData)
 
-    // Aggregate FFT bins into 10 perceptual bands
+    // --- Noise floor calibration phase ---
+    if (isCalibrating) {
+      for (let i = 0; i < frequencyData.length; i++) {
+        calibrationAccum[i] += frequencyData[i]
+      }
+      calibrationCount++
+
+      if (calibrationCount >= CALIBRATION_FRAMES) {
+        // Compute per-bin noise floor (average × margin)
+        noiseFloor = new Uint8Array(frequencyData.length)
+        for (let i = 0; i < frequencyData.length; i++) {
+          noiseFloor[i] = Math.min(255,
+            Math.round((calibrationAccum[i] / calibrationCount) * NOISE_MARGIN)
+          )
+        }
+        isCalibrating = false
+        calibrationAccum = null
+      }
+
+      // During calibration, output silence (bars stay at zero)
+      animFrame = requestAnimationFrame(animate)
+      return
+    }
+
+    // --- Normal processing: subtract noise floor, aggregate bands ---
     const rawBands = new Array(NUM_BANDS)
     let totalEnergy = 0
     let activeBandCount = 0
@@ -75,13 +116,18 @@ export function useMicrophoneAnalyzer() {
       let sum = 0
       let count = 0
       for (let bin = low; bin <= high; bin++) {
-        sum += frequencyData[bin]
+        // Subtract per-bin noise floor, clamp to zero
+        const cleaned = noiseFloor
+          ? Math.max(0, frequencyData[bin] - noiseFloor[bin])
+          : frequencyData[bin]
+        sum += cleaned
         count++
       }
       const avg = count > 0 ? sum / count : 0
-      rawBands[b] = avg
-      totalEnergy += avg
-      if (avg > 20) activeBandCount++
+      // Apply per-band gain to compensate for mic rolloff at high frequencies
+      rawBands[b] = avg * BAND_GAIN[b]
+      totalEnergy += rawBands[b]
+      if (rawBands[b] > 20) activeBandCount++
     }
 
     // Auto-normalization: track a running maximum with fast attack / slow decay
@@ -158,6 +204,12 @@ export function useMicrophoneAnalyzer() {
       frequencyData = new Uint8Array(analyser.frequencyBinCount)
       bandBinRanges = calculateBandRanges(audioContext.sampleRate)
 
+      // Begin noise floor calibration: accumulate ambient noise for ~0.75s
+      isCalibrating = true
+      calibrationCount = 0
+      calibrationAccum = new Float64Array(analyser.frequencyBinCount)
+      noiseFloor = null
+
       confidenceCounter = 0
       normMax = NORM_MIN
       isListening.value = true
@@ -193,6 +245,10 @@ export function useMicrophoneAnalyzer() {
     isMusicDetected.value = false
     confidenceCounter = 0
     normMax = NORM_MIN
+    isCalibrating = false
+    calibrationCount = 0
+    calibrationAccum = null
+    noiseFloor = null
     // Note: bands/peaks are intentionally NOT reset here.
     // SpectrumAnalyzer crossfades using a blend factor — stale mic values
     // are harmless and allow the transition back to procedural to be smooth.
