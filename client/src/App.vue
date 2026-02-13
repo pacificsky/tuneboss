@@ -4,6 +4,7 @@
       v-if="connected && authenticated && track"
       :track="track"
       :playback="playback"
+      :spectrumColors="spectrumColors"
       @colors-extracted="onColorsExtracted"
     />
     <div v-else-if="connected && authenticated && !track" class="idle-state">
@@ -36,6 +37,7 @@ const authenticated = ref(false)
 const track = ref(null)
 const playback = ref({ position: 0, timestamp: Date.now() })
 const colors = ref({ bg: '#121212', text: '#ffffff' })
+const spectrumColors = ref(null)
 
 let socket = null
 
@@ -48,6 +50,7 @@ const themeStyles = computed(() => ({
 
 function onColorsExtracted(extracted) {
   colors.value = extracted
+  spectrumColors.value = extracted.spectrum || null
 }
 
 async function checkAuthStatus() {

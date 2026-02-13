@@ -26,6 +26,10 @@ const transitioning = ref(false)
 
 let lastExtractedSrc = null
 
+function rgbStr(rgb) {
+  return `rgb(${Math.round(rgb[0])}, ${Math.round(rgb[1])}, ${Math.round(rgb[2])})`
+}
+
 async function onImageLoad(event) {
   const img = event.target
   if (!img || img.src === lastExtractedSrc) return
@@ -42,9 +46,18 @@ async function onImageLoad(event) {
 
       // Ensure text has enough contrast on the dark background
       const bg = `rgb(${Math.round(bgRgb[0] * 0.4)}, ${Math.round(bgRgb[1] * 0.4)}, ${Math.round(bgRgb[2] * 0.4)})`
-      const text = `rgb(${Math.round(textRgb[0])}, ${Math.round(textRgb[1])}, ${Math.round(textRgb[2])})`
+      const text = rgbStr(textRgb)
 
-      emit('colors-extracted', { bg, text })
+      // Spectrum colors derived from album palette
+      const lightVibrant = palette.LightVibrant || vibrant
+      const darkVibrant = palette.DarkVibrant || vibrant
+      const spectrum = {
+        primary: vibrant.rgb.slice(),
+        light: lightVibrant.rgb.slice(),
+        dark: darkVibrant.rgb.slice()
+      }
+
+      emit('colors-extracted', { bg, text, spectrum })
     }
   } catch (err) {
     console.warn('Color extraction failed:', err)
