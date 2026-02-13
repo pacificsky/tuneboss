@@ -50,6 +50,11 @@ defineEmits(['colors-extracted'])
   padding: 2rem 1.5rem;
 }
 
+.now-playing__progress {
+  margin-top: 0.5rem;
+  margin-bottom: -0.5rem;
+}
+
 .now-playing__source {
   display: flex;
   align-items: center;
