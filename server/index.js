@@ -14,6 +14,13 @@ const io = new Server(httpServer, {
   cors: { origin: '*' }
 });
 
+// Client-facing runtime config
+app.get('/api/config', (req, res) => {
+  res.json({
+    enableSpectrum: process.env.ENABLE_SPECTRUM !== 'false'
+  });
+});
+
 // Spotify OAuth routes
 setupSpotifyAuth(app);
 

@@ -14,6 +14,7 @@
       :album="track?.album"
     />
     <SpectrumAnalyzer
+      v-if="enableSpectrum"
       :trackId="track?.trackId"
       :playback="playback"
       :spectrumColors="spectrumColors"
@@ -34,7 +35,8 @@ import SpectrumAnalyzer from './SpectrumAnalyzer.vue'
 defineProps({
   track: { type: Object, default: null },
   playback: { type: Object, default: () => ({ position: 0, timestamp: Date.now() }) },
-  spectrumColors: { type: Object, default: null }
+  spectrumColors: { type: Object, default: null },
+  enableSpectrum: { type: Boolean, default: true }
 })
 
 defineEmits(['colors-extracted'])
