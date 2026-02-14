@@ -1,0 +1,32 @@
+services:
+  caddy:
+    build: deploy/caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    env_file: .env
+    environment:
+      TUNEBOSS_BACKEND: server
+    depends_on:
+      - server
+
+  server:
+    build: .
+    restart: unless-stopped
+    expose:
+      - "3000"
+    volumes:
+      - tuneboss-data:/app/data
+    env_file: .env
+    environment:
+      TOKEN_PATH: /app/data/.tokens.json
+
+volumes:
+  caddy-data:
+  caddy-config:
+  tuneboss-data:

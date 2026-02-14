@@ -1,0 +1,9 @@
+node_modules/
+client/node_modules/
+client/dist/
+.env
+.tokens.json
+.git/
+*.log
+.DS_Store
+deploy/

@@ -3,5 +3,5 @@
 		dns cloudflare {$CLOUDFLARE_API_TOKEN}
 	}
 
-	reverse_proxy localhost:{$TUNEBOSS_PORT:3000}
+	reverse_proxy {$TUNEBOSS_BACKEND:localhost}:{$TUNEBOSS_PORT:3000}
 }
