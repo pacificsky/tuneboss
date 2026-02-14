@@ -5,6 +5,7 @@
       :track="track"
       :playback="playback"
       :spectrumColors="spectrumColors"
+      :enableSpectrum="enableSpectrum"
       @colors-extracted="onColorsExtracted"
     />
     <div v-else-if="connected && authenticated && !track" class="idle-state">
@@ -34,6 +35,7 @@ useWakeLock()
 
 const connected = ref(false)
 const authenticated = ref(false)
+const enableSpectrum = ref(true)
 const track = ref(null)
 const playback = ref({ position: 0, duration: 0, timestamp: Date.now() })
 const colors = ref({ bg: '#121212', text: '#ffffff' })
@@ -63,8 +65,19 @@ async function checkAuthStatus() {
   }
 }
 
+async function fetchConfig() {
+  try {
+    const res = await fetch('/api/config')
+    const data = await res.json()
+    enableSpectrum.value = data.enableSpectrum !== false
+  } catch {
+    // Default to enabled if config endpoint is unreachable
+  }
+}
+
 onMounted(() => {
   checkAuthStatus()
+  fetchConfig()
 
   const serverUrl = window.location.origin
   socket = io(serverUrl, {
