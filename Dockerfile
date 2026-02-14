@@ -1,5 +1,5 @@
 # Stage 1: Build the Vue client
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY client/ ./client/
 RUN npm run build:client
 
 # Stage 2: Production image
-FROM node:22-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
