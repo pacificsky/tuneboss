@@ -137,6 +137,110 @@ pm2 save
 
 This ensures TuneBoss restarts automatically after power outages or reboots.
 
+## Homelab Deployment (HTTPS with Let's Encrypt)
+
+If you're running TuneBoss on a VM in your homelab, you'll need HTTPS for:
+- Spotify OAuth redirect URIs (Spotify requires HTTPS for non-localhost)
+- The Screen Wake Lock API and `getDisplayMedia` in the browser
+
+This setup uses **Caddy** as a reverse proxy with automatic Let's Encrypt certificates via the **DNS-01 challenge** through Cloudflare. This works even though your server has an internal (e.g. 10.x) IP — no inbound internet access required.
+
+### How it works
+
+```
+iPhone (Safari)
+    |
+    | HTTPS :443
+    v
+  Caddy  ──DNS-01 challenge──>  Cloudflare API  ──>  Let's Encrypt
+    |
+    | HTTP :3000 (localhost)
+    v
+  Node.js (Express + Socket.io)
+```
+
+Caddy terminates TLS and proxies to your Node app. Certs are issued via DNS-01 (Caddy creates a temporary TXT record in your Cloudflare zone to prove domain ownership) and auto-renewed ~30 days before expiry.
+
+### Prerequisites
+
+- An Ubuntu VM (or similar) with sudo access
+- A domain managed by Cloudflare (e.g. `example.com`)
+- A Cloudflare API token with **Zone:DNS:Edit** permission
+
+### Step 1: Create a Cloudflare DNS record
+
+In the Cloudflare dashboard for your domain, create an **A record**:
+- **Name**: `tuneboss` (or whatever subdomain you want)
+- **Content**: your VM's internal IP (e.g. `10.0.1.50`)
+- **Proxy status**: **DNS only** (grey cloud — do NOT proxy through Cloudflare)
+
+### Step 2: Create a Cloudflare API token
+
+1. Go to https://dash.cloudflare.com/profile/api-tokens
+2. Click **Create Token**
+3. Use the **Edit zone DNS** template
+4. Under **Zone Resources**, select your specific zone (e.g. `example.com`)
+5. Save the token — you'll need it in Step 4
+
+### Step 3: Install Caddy with the Cloudflare DNS module
+
+```bash
+sudo bash deploy/setup-caddy.sh
+```
+
+This builds Caddy from source with the Cloudflare DNS plugin (required for DNS-01 challenges) and installs the systemd service.
+
+### Step 4: Configure Caddy
+
+```bash
+sudo cp deploy/caddy.env.example /etc/caddy/caddy.env
+sudo nano /etc/caddy/caddy.env
+```
+
+Fill in your values:
+
+```
+TUNEBOSS_HOSTNAME=tuneboss.example.com
+CLOUDFLARE_API_TOKEN=your_token_here
+TUNEBOSS_PORT=3000
+```
+
+### Step 5: Configure TuneBoss for HTTPS
+
+Update your `.env` to use the HTTPS redirect URI:
+
+```
+SPOTIFY_REDIRECT_URI=https://tuneboss.example.com/auth/spotify/callback
+```
+
+Then update the **Redirect URI** in your [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) to match.
+
+### Step 6: Start everything
+
+```bash
+# Start Caddy
+sudo systemctl daemon-reload
+sudo systemctl enable --now caddy
+
+# Start TuneBoss (with pm2 for persistence)
+pm2 start npm --name tuneboss -- start
+pm2 save
+```
+
+Watch Caddy's logs to confirm the certificate is issued:
+
+```bash
+sudo journalctl -u caddy -f
+```
+
+You should see messages about obtaining a certificate for your domain. First-time issuance can take 30-60 seconds while the DNS-01 challenge propagates.
+
+### Step 7: Access via HTTPS
+
+Open `https://tuneboss.example.com` on your iPhone (or any device on the same network). Caddy handles HTTPS termination and certificate renewal automatically — no manual intervention needed.
+
+> **Note**: Your devices must be able to resolve the hostname to the internal IP. Since the Cloudflare DNS A record points to the internal IP, this works automatically for any device using public DNS resolvers (e.g. 1.1.1.1, 8.8.8.8).
+
 ## Troubleshooting
 
 **"Nothing playing" even though music is on**
@@ -148,7 +252,13 @@ This ensures TuneBoss restarts automatically after power outages or reboots.
 - If it never appears, the `/audio-analysis` endpoint may be returning errors — check the server logs.
 
 **iPhone display goes to sleep**
-- The Screen Wake Lock API requires HTTPS on some browsers. For local HTTP, it may not work. As a workaround, go to Settings > Display & Brightness > Auto-Lock > Never.
+- The Screen Wake Lock API requires HTTPS. If running without the Caddy HTTPS setup, go to Settings > Display & Brightness > Auto-Lock > Never.
 
 **OAuth redirect fails**
 - Double check that the redirect URI in `.env` matches exactly what's in your Spotify Dashboard (including `http` vs `https` and the port number).
+
+**Caddy certificate not issuing**
+- Check Caddy logs: `sudo journalctl -u caddy -f`
+- Verify the Cloudflare API token has Zone:DNS:Edit permission for the correct zone.
+- Ensure the DNS A record exists and the proxy status is set to **DNS only** (grey cloud), not **Proxied** (orange cloud).
+- DNS-01 propagation can take a couple of minutes on first run. Be patient.

@@ -1,0 +1,7 @@
+{$TUNEBOSS_HOSTNAME} {
+	tls {
+		dns cloudflare {$CLOUDFLARE_API_TOKEN}
+	}
+
+	reverse_proxy localhost:{$TUNEBOSS_PORT:3000}
+}
