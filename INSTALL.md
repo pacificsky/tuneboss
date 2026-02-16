@@ -64,7 +64,15 @@ HTTPS is required for the Screen Wake Lock API and is recommended for Spotify OA
 
 - Docker and Docker Compose on the target machine
 - A domain managed by Cloudflare (e.g., `example.com`)
-- A Cloudflare API token with **Zone:DNS:Edit** permission ([create one here](https://dash.cloudflare.com/profile/api-tokens))
+- A Cloudflare API token with **Zone:DNS:Edit** permission
+
+To create the token:
+
+1. Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. Click **Create Token**
+3. Use the **Edit zone DNS** template
+4. Under **Zone Resources**, select your specific zone (e.g., `example.com`)
+5. Save the token
 
 ### Step 1: Create a Cloudflare DNS record
 
@@ -195,6 +203,54 @@ To keep TuneBoss running across reboots:
 npm install -g pm2
 pm2 start npm --name tuneboss -- start
 pm2 startup && pm2 save
+```
+
+### Adding HTTPS without Docker (Caddy + systemd)
+
+If you want HTTPS on a bare-metal install (required for Screen Wake Lock and recommended for Spotify OAuth), you can run Caddy natively as a systemd service instead of using the Docker setup in Option 2.
+
+Prerequisites: a domain on Cloudflare and an API token with Zone:DNS:Edit permission (see [Option 2](#option-2-homelab-with-https) for details).
+
+**Install Caddy with the Cloudflare DNS module:**
+
+```bash
+sudo bash deploy/setup-caddy.sh
+```
+
+**Configure Caddy:**
+
+```bash
+sudo cp deploy/caddy.env.example /etc/caddy/caddy.env
+sudo nano /etc/caddy/caddy.env
+```
+
+Fill in your values:
+
+```
+TUNEBOSS_HOSTNAME=tuneboss.example.com
+CLOUDFLARE_API_TOKEN=your_token_here
+TUNEBOSS_PORT=3000
+```
+
+**Update your `.env`** to use the HTTPS redirect URI:
+
+```
+SPOTIFY_REDIRECT_URI=https://tuneboss.example.com/auth/spotify/callback
+```
+
+Then update the Redirect URI in your [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) to match.
+
+**Start Caddy:**
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now caddy
+```
+
+Watch the logs to confirm the certificate is issued:
+
+```bash
+sudo journalctl -u caddy -f
 ```
 
 ---
