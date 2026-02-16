@@ -2,20 +2,9 @@
 
 A real-time **now playing** display for Spotify, designed to turn an iPhone into a dedicated always-on music screen.
 
-```
-┌─────────────────────────────────┐
-│         🎵  Album Art           │
-│        ┌─────────────┐          │
-│        │             │          │
-│        │             │          │
-│        └─────────────┘          │
-│      Song Title                 │
-│      Artist — Album             │
-│  ┌──────────────────────── ○──┐ │
-│  0:42              3:18       │ │
-│  ▐█▌▐██▌▐█▌▐▌▐██▌▐█▌▐▌▐█▌▐▌ │ │
-└─────────────────────────────────┘
-```
+<p align="center">
+  <img src="images/scr_1.png" alt="TuneBoss displaying album art, track info, progress bar, and spectrum analyzer" width="300">
+</p>
 
 TuneBoss polls the Spotify Web API and pushes track updates over WebSocket to a Vue 3 PWA. The display renders album art, track metadata, a progress bar, and a 10-band spectrum analyzer — all with dynamic color theming extracted from the cover art.
 
