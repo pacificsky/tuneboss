@@ -2,72 +2,40 @@ import { ref, onMounted, onUnmounted } from 'vue'
 
 export function useWakeLock() {
   const isActive = ref(false)
-  let sentinel = null
-  let refreshInterval = null
+  let wakeLock = null
 
   async function request() {
-    if (!('wakeLock' in navigator)) return false
-    if (document.visibilityState !== 'visible') return false
-
     try {
-      const s = await navigator.wakeLock.request('screen')
-
-      // Replace the previous sentinel (if any) so its stale release
-      // listener can no longer flip isActive to false.
-      sentinel = s
-      isActive.value = true
-
-      s.addEventListener('release', () => {
-        // Ignore if a newer sentinel has already replaced this one.
-        if (sentinel !== s) return
-
-        sentinel = null
+      wakeLock = await navigator.wakeLock.request('screen')
+      wakeLock.addEventListener('release', () => {
         isActive.value = false
-
-        // Immediately try to re-acquire — iOS Safari can release the
-        // lock silently for power-management reasons while the page is
-        // still visible.  Re-requesting right away closes the gap
-        // before the screen auto-locks.
-        if (document.visibilityState === 'visible') {
-          request()
-        }
+        wakeLock = null
       })
-
-      return true
+      isActive.value = true
     } catch (err) {
-      console.warn('[wakelock] request failed:', err.message)
-      return false
+      console.error(`[wakelock] ${err.name}, ${err.message}`)
     }
   }
 
   function handleVisibilityChange() {
-    if (document.visibilityState !== 'visible') return
-
-    // Re-acquire when returning to the foreground — iOS releases the
-    // wake lock whenever the page is hidden.
-    request()
+    if (wakeLock !== null && document.visibilityState === 'visible') {
+      setTimeout(() => { request() }, 1000)
+    }
   }
 
   onMounted(() => {
-    request()
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    // Safety net: periodically check and re-acquire if the lock was
-    // silently dropped without firing a release event.
-    refreshInterval = setInterval(() => {
-      if (document.visibilityState === 'visible' && !isActive.value) {
-        request()
-      }
-    }, 10_000)
+    if ('wakeLock' in navigator) {
+      request()
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+    }
   })
 
   onUnmounted(() => {
     document.removeEventListener('visibilitychange', handleVisibilityChange)
-    if (sentinel) {
-      sentinel.release()
-      sentinel = null
+    if (wakeLock) {
+      wakeLock.release()
+      wakeLock = null
     }
-    if (refreshInterval) clearInterval(refreshInterval)
   })
 
   return { isActive }
