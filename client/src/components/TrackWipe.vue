@@ -4,7 +4,7 @@
     :key="wipeKey"
     class="track-wipe"
     :class="`track-wipe--${currentVariant}`"
-    :style="{ backgroundColor: wipeColor }"
+    :style="{ backgroundColor: color }"
     @animationend="active = false"
   />
 </template>
@@ -19,7 +19,6 @@ const props = defineProps({
 
 const active = ref(false)
 const wipeKey = ref(0)
-const wipeColor = ref('rgb(255, 255, 255)')
 
 const variants = ['horizontal', 'vertical', 'radial', 'diagonal']
 const currentVariant = computed(() => variants[wipeKey.value % variants.length])
@@ -27,7 +26,6 @@ const currentVariant = computed(() => variants[wipeKey.value % variants.length])
 watch(() => props.trackId, (newId, oldId) => {
   // Only wipe on genuine track-to-track transitions, not initial load or stop/resume
   if (!newId || !oldId) return
-  wipeColor.value = props.color
   wipeKey.value++
   active.value = true
 })
@@ -43,6 +41,7 @@ watch(() => props.trackId, (newId, oldId) => {
   pointer-events: none;
   z-index: 9999;
   opacity: 0.45;
+  transition: background-color 1s ease;
 }
 
 /* 1. Horizontal sweep — enters from left, exits right */
