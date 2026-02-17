@@ -6,6 +6,9 @@
       :playback="playback"
       :spectrumColors="spectrumColors"
       :enableSpectrum="enableSpectrum"
+      :wakeLockSupported="wakeLockSupported"
+      :wakeLockActive="wakeLockActive"
+      @toggle-wake-lock="toggleWakeLock"
       @colors-extracted="onColorsExtracted"
     />
     <div v-else-if="connected && authenticated && !track" class="idle-state">
@@ -31,7 +34,15 @@ import { io } from 'socket.io-client'
 import NowPlaying from './components/NowPlaying.vue'
 import { useWakeLock } from './composables/useWakeLock.js'
 
-useWakeLock()
+const { isSupported: wakeLockSupported, isActive: wakeLockActive, enable: enableWakeLock, disable: disableWakeLock } = useWakeLock()
+
+function toggleWakeLock() {
+  if (wakeLockActive.value) {
+    disableWakeLock()
+  } else {
+    enableWakeLock()
+  }
+}
 
 const connected = ref(false)
 const authenticated = ref(false)
@@ -205,4 +216,5 @@ html, body {
 .spotify-btn {
   background: #1db954;
 }
+
 </style>
