@@ -22,6 +22,17 @@
     <div v-else class="connecting">
       <p>Connecting...</p>
     </div>
+    <button
+      v-if="wakeLockSupported"
+      class="wake-lock-toggle"
+      :class="{ 'wake-lock-toggle--active': wakeLockActive }"
+      @click="toggleWakeLock"
+      aria-label="Toggle screen wake lock"
+    >
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2z"/>
+      </svg>
+    </button>
   </div>
 </template>
 
@@ -31,7 +42,15 @@ import { io } from 'socket.io-client'
 import NowPlaying from './components/NowPlaying.vue'
 import { useWakeLock } from './composables/useWakeLock.js'
 
-useWakeLock()
+const { isSupported: wakeLockSupported, isActive: wakeLockActive, enable: enableWakeLock, disable: disableWakeLock } = useWakeLock()
+
+function toggleWakeLock() {
+  if (wakeLockActive.value) {
+    disableWakeLock()
+  } else {
+    enableWakeLock()
+  }
+}
 
 const connected = ref(false)
 const authenticated = ref(false)
@@ -204,5 +223,34 @@ html, body {
 
 .spotify-btn {
   background: #1db954;
+}
+
+.wake-lock-toggle {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: background 0.3s ease, color 0.3s ease;
+  -webkit-tap-highlight-color: transparent;
+  padding: 0;
+  z-index: 10;
+}
+
+.wake-lock-toggle:active {
+  transform: scale(0.9);
+}
+
+.wake-lock-toggle--active {
+  background: rgba(29, 185, 84, 0.2);
+  color: rgba(29, 185, 84, 0.9);
 }
 </style>

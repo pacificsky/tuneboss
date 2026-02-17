@@ -167,7 +167,7 @@ Uses the device microphone to capture ambient audio (music playing from nearby s
 
 ### `useWakeLock.js` — Screen wake lock composable
 
-Keeps the iPhone screen on using the Screen Wake Lock API (`navigator.wakeLock.request('screen')`). A `wantLock` intent flag tracks whether the lock should be held, independent of the actual lock state. The lock is requested on mount and re-acquired on `visibilitychange` — iOS releases the lock whenever the page is hidden, so the handler checks `wantLock` (not the lock reference) to ensure it always re-requests. Everything is cleaned up on unmount.
+Keeps the iPhone screen on using the Screen Wake Lock API (`navigator.wakeLock.request('screen')`). iOS Safari requires a user gesture (tap/click) before the API will grant the lock, so the composable exposes `enable()` / `disable()` functions rather than auto-requesting on mount. A lock toggle button in `App.vue` calls `enable()` on tap, satisfying the user-activation requirement. A `wantLock` intent flag tracks whether the lock should be held, independent of the actual lock state. The lock is re-acquired on `visibilitychange` — iOS releases the lock whenever the page is hidden, so the handler checks `wantLock` (not the lock reference) to ensure it always re-requests. Everything is cleaned up on unmount.
 
 ## Real-Time Communication Protocol
 
@@ -205,7 +205,7 @@ All real-time data flows through Socket.io over a single WebSocket connection.
 | **Token persistence to disk** | Saves tokens to `.tokens.json` so the server resumes authenticated after a restart. A flat JSON file is appropriate for a single-user appliance — no database needed. |
 | **Client-gated polling** | Spotify polling only runs while at least one Socket.io client is connected. Avoids burning API quota when nobody is watching. |
 | **Procedural spectrum (no audio analysis API)** | Spotify deprecated the `/audio-analysis` endpoint in November 2024 (returns 403 for new apps). Instead, TuneBoss generates per-track visuals using a seeded PRNG keyed on the Spotify track ID — each song gets a unique, deterministic "personality" with its own BPM and oscillator shapes, without any external dependency. |
-| **Screen Wake Lock API with intent-based re-acquire** | The native Screen Wake Lock API keeps the screen on over HTTPS. iOS Safari releases the lock when the page is backgrounded, so the composable uses a `wantLock` intent flag (independent of lock state) to re-acquire on `visibilitychange`. |
+| **Screen Wake Lock API with user-activation gate** | The native Screen Wake Lock API keeps the screen on over HTTPS. iOS Safari requires a user gesture before granting the lock, so the composable exposes `enable()` / `disable()` triggered by a UI toggle. A `wantLock` intent flag (independent of lock state) drives re-acquire on `visibilitychange`. |
 | **Aggregator pattern** | Decouples providers from the Socket.io transport. Adding a new music service means implementing a provider class and wiring it into the aggregator — no changes to the WebSocket layer. |
 | **Canvas over SVG/DOM** | Canvas is GPU-accelerated and avoids DOM churn. Critical for smooth 60 fps animation on mobile hardware. |
 | **3-second polling interval** | Spotify's rate limit is approximately 3,600 requests/hour. A 3-second interval uses ~1,200 requests/hour, well within limits while keeping the display responsive. |

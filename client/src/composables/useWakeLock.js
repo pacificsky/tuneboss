@@ -1,6 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
 export function useWakeLock() {
+  const isSupported = ref(false)
   const isActive = ref(false)
   let wakeLock = null
   let wantLock = false
@@ -24,10 +25,22 @@ export function useWakeLock() {
     }
   }
 
+  function enable() {
+    wantLock = true
+    request()
+  }
+
+  function disable() {
+    wantLock = false
+    if (wakeLock) {
+      wakeLock.release()
+      wakeLock = null
+    }
+  }
+
   onMounted(() => {
-    if ('wakeLock' in navigator) {
-      wantLock = true
-      request()
+    isSupported.value = 'wakeLock' in navigator
+    if (isSupported.value) {
       document.addEventListener('visibilitychange', handleVisibilityChange)
     }
   })
@@ -41,5 +54,5 @@ export function useWakeLock() {
     }
   })
 
-  return { isActive }
+  return { isSupported, isActive, enable, disable }
 }
