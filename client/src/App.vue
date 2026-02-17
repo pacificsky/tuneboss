@@ -1,6 +1,7 @@
 <template>
   <div class="tuneboss" :style="themeStyles">
     <TrackWipe
+      v-if="enableTrackWipe"
       :trackId="track?.trackId"
       :color="colors.text"
     />
@@ -52,6 +53,7 @@ function toggleWakeLock() {
 const connected = ref(false)
 const authenticated = ref(false)
 const enableSpectrum = ref(true)
+const enableTrackWipe = ref(false)
 const track = ref(null)
 const playback = ref({ position: 0, duration: 0, timestamp: Date.now() })
 const colors = ref({ bg: '#121212', text: '#ffffff' })
@@ -86,6 +88,7 @@ async function fetchConfig() {
     const res = await fetch('/api/config')
     const data = await res.json()
     enableSpectrum.value = data.enableSpectrum !== false
+    enableTrackWipe.value = data.enableTrackWipe === true
   } catch {
     // Default to enabled if config endpoint is unreachable
   }

@@ -17,7 +17,8 @@ const io = new Server(httpServer, {
 // Client-facing runtime config
 app.get('/api/config', (req, res) => {
   res.json({
-    enableSpectrum: process.env.ENABLE_SPECTRUM !== 'false'
+    enableSpectrum: process.env.ENABLE_SPECTRUM !== 'false',
+    enableTrackWipe: process.env.ENABLE_TRACK_WIPE === 'true'
   });
 });
 
