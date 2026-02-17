@@ -106,6 +106,20 @@ Displays the album art image at 320px square with 12px border radius and a box s
 
 Emits `colors-extracted` up to App.vue. On track change, applies a 600ms fade-in animation via CSS keyframes.
 
+### `TrackWipe.vue` — Track-change transition
+
+A full-screen color overlay that plays a wipe animation on track changes, giving the display a broadcast/TV-like visual punctuation. The wipe fires once every N track changes (configurable via `TRACK_WIPE_INTERVAL`, default 10) rather than on every transition — this keeps it feeling like an occasional treat rather than a constant distraction.
+
+**Why not every track?** On an always-on display cycling through a playlist, a wipe on every 3–4 minute track change quickly becomes visual noise. At an interval of 10 (roughly every 30–40 minutes of listening), the wipe acts as a subtle "scene change" that breaks up long sessions without wearing out its welcome.
+
+**Animation variants**: Four clip-path animations cycle in round-robin order: horizontal sweep (left→right), vertical sweep (top→bottom), radial iris (blooms from album art center, fades out), and diagonal wipe (angled edge, top-left→bottom-right). Each runs 1.7–1.9s at 45% opacity with `cubic-bezier(0.25, 0.1, 0.25, 1)` easing.
+
+**Color blending**: The wipe starts in the outgoing track's color (because the new album art hasn't loaded yet when the animation begins). When the new image loads and `node-vibrant` extracts the incoming palette (~200–500ms in), the `color` prop updates reactively and a `transition: background-color 1s ease` on the div smoothly blends from the old palette to the new. By the time the wipe sweeps off screen, it's already close to the incoming track's color — bridging the palette gap so the transition feels cohesive rather than jarring.
+
+**Interval counting**: The counter lives inside TrackWipe rather than in App.vue to avoid a Vue reactivity timing issue: if the parent toggled `v-if` based on a counter that updates in the same tick as `trackId`, the component could mount/unmount at the exact moment it needs to observe the prop change. Keeping TrackWipe always mounted (when enabled) and letting it skip internally is simpler and race-free.
+
+**Configuration**: `ENABLE_TRACK_WIPE` (default `false`) toggles the feature. `TRACK_WIPE_INTERVAL` (default `10`, values ≤ 0 fall back to 10) controls how many track changes occur between wipes.
+
 ### `TrackInfo.vue` — Metadata display
 
 Presentational component showing title (1.5rem, bold, 2-line clamp), artist (1.1rem, 80% opacity, 1-line clamp), and album (0.85rem, 50% opacity, 1-line clamp).
@@ -212,6 +226,7 @@ All real-time data flows through Socket.io over a single WebSocket connection.
 | **node-vibrant on the client** | Color extraction runs after the image loads in the browser, avoiding server-side image decoding. The server doesn't need to fetch or process album art at all. |
 | **Microphone spectrum (no library)** | The mic analyzer uses raw Web Audio API (`getUserMedia` → `AnalyserNode` → `getByteFrequencyData`) rather than a library like audioMotion-analyzer. The core pipeline is ~80 lines of code; a library would add ~20KB for features we'd never use (240 band modes, radial viz, weighting filters) while managing its own AudioContext and animation loop that conflicts with our existing architecture. |
 | **Energy-based music detection** | Detects music via sustained spectral energy across multiple bands rather than audio fingerprinting. Since we already know the playing track from Spotify's API, we only need to confirm "is the mic hearing music?" — not identify which song it is. Energy detection is simple, reliable, and requires no server-side processing. |
+| **Track wipe every N tracks, not every track** | On an always-on display, a wipe on every 3–4 minute track change becomes visual noise fast. Defaulting to every 10th track (~30–40 min) makes it an occasional "scene change" that breaks up long sessions. The wipe color blends reactively from the outgoing palette to the incoming one via a CSS transition, so even when palettes are dramatically different the transition feels smooth. |
 
 ## Deployment
 
