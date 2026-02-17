@@ -1,5 +1,9 @@
 <template>
   <div class="tuneboss" :style="themeStyles">
+    <TrackWipe
+      :trackId="track?.trackId"
+      :color="colors.text"
+    />
     <NowPlaying
       v-if="connected && authenticated && track"
       :track="track"
@@ -32,6 +36,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { io } from 'socket.io-client'
 import NowPlaying from './components/NowPlaying.vue'
+import TrackWipe from './components/TrackWipe.vue'
 import { useWakeLock } from './composables/useWakeLock.js'
 
 const { isSupported: wakeLockSupported, isActive: wakeLockActive, enable: enableWakeLock, disable: disableWakeLock } = useWakeLock()
