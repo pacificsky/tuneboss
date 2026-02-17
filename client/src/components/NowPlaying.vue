@@ -18,6 +18,9 @@
       :trackId="track?.trackId"
       :playback="playback"
       :spectrumColors="spectrumColors"
+      :wakeLockSupported="wakeLockSupported"
+      :wakeLockActive="wakeLockActive"
+      @toggle-wake-lock="$emit('toggle-wake-lock')"
     />
     <div class="now-playing__source">
       <span class="source-dot"></span>
@@ -36,10 +39,12 @@ defineProps({
   track: { type: Object, default: null },
   playback: { type: Object, default: () => ({ position: 0, timestamp: Date.now() }) },
   spectrumColors: { type: Object, default: null },
-  enableSpectrum: { type: Boolean, default: true }
+  enableSpectrum: { type: Boolean, default: true },
+  wakeLockSupported: { type: Boolean, default: false },
+  wakeLockActive: { type: Boolean, default: false }
 })
 
-defineEmits(['colors-extracted'])
+defineEmits(['colors-extracted', 'toggle-wake-lock'])
 </script>
 
 <style scoped>

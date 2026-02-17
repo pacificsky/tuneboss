@@ -23,21 +23,34 @@
       <p>Unmute and play!</p>
     </div>
 
-    <button
-      v-if="micSupported"
-      class="mic-toggle"
-      :class="{
-        'mic-toggle--listening': micCalibrating,
-        'mic-toggle--active': micListening && !micCalibrating
-      }"
-      @click="toggleMic"
-      aria-label="Toggle microphone analyzer"
-    >
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-      </svg>
-    </button>
+    <div class="toggle-row">
+      <button
+        v-if="wakeLockSupported"
+        class="toggle-btn"
+        :class="{ 'toggle-btn--active': wakeLockActive }"
+        @click="$emit('toggle-wake-lock')"
+        aria-label="Toggle screen wake lock"
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+          <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2z"/>
+        </svg>
+      </button>
+      <button
+        v-if="micSupported"
+        class="toggle-btn"
+        :class="{
+          'toggle-btn--listening': micCalibrating,
+          'toggle-btn--active': micListening && !micCalibrating
+        }"
+        @click="toggleMic"
+        aria-label="Toggle microphone analyzer"
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        </svg>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -49,8 +62,12 @@ import { useMicrophoneAnalyzer } from '../composables/useMicrophoneAnalyzer.js'
 const props = defineProps({
   trackId: { type: String, default: null },
   playback: { type: Object, default: () => ({ position: 0, timestamp: Date.now() }) },
-  spectrumColors: { type: Object, default: null }
+  spectrumColors: { type: Object, default: null },
+  wakeLockSupported: { type: Boolean, default: false },
+  wakeLockActive: { type: Boolean, default: false }
 })
+
+defineEmits(['toggle-wake-lock'])
 
 const canvasRef = ref(null)
 const canvasWidth = 340
@@ -334,7 +351,12 @@ onUnmounted(() => {
   -webkit-tap-highlight-color: transparent;
 }
 
-.mic-toggle {
+.toggle-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.toggle-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -350,17 +372,17 @@ onUnmounted(() => {
   padding: 0;
 }
 
-.mic-toggle:active {
+.toggle-btn:active {
   transform: scale(0.9);
 }
 
-.mic-toggle--listening {
+.toggle-btn--listening {
   background: rgba(255, 255, 255, 0.12);
   color: rgba(255, 255, 255, 0.5);
   animation: mic-pulse 2s ease infinite;
 }
 
-.mic-toggle--active {
+.toggle-btn--active {
   background: rgba(29, 185, 84, 0.2);
   color: rgba(29, 185, 84, 0.9);
   animation: none;
