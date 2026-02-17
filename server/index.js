@@ -16,9 +16,11 @@ const io = new Server(httpServer, {
 
 // Client-facing runtime config
 app.get('/api/config', (req, res) => {
+  const wipeInterval = parseInt(process.env.TRACK_WIPE_INTERVAL, 10);
   res.json({
     enableSpectrum: process.env.ENABLE_SPECTRUM !== 'false',
-    enableTrackWipe: process.env.ENABLE_TRACK_WIPE === 'true'
+    enableTrackWipe: process.env.ENABLE_TRACK_WIPE === 'true',
+    trackWipeInterval: wipeInterval > 0 ? wipeInterval : 10
   });
 });
 

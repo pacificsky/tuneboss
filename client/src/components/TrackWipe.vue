@@ -14,11 +14,13 @@ import { ref, computed, watch } from 'vue'
 
 const props = defineProps({
   trackId: { type: String, default: null },
-  color: { type: String, default: 'rgb(255, 255, 255)' }
+  color: { type: String, default: 'rgb(255, 255, 255)' },
+  interval: { type: Number, default: 10 }
 })
 
 const active = ref(false)
 const wipeKey = ref(0)
+const trackChangeCount = ref(0)
 
 const variants = ['horizontal', 'vertical', 'radial', 'diagonal']
 const currentVariant = computed(() => variants[wipeKey.value % variants.length])
@@ -26,6 +28,8 @@ const currentVariant = computed(() => variants[wipeKey.value % variants.length])
 watch(() => props.trackId, (newId, oldId) => {
   // Only wipe on genuine track-to-track transitions, not initial load or stop/resume
   if (!newId || !oldId) return
+  const count = trackChangeCount.value++
+  if (count % props.interval !== 0) return
   wipeKey.value++
   active.value = true
 })
