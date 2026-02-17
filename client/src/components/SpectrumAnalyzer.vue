@@ -46,8 +46,16 @@
         @click="$emit('toggle-wake-lock')"
         aria-label="Toggle screen wake lock"
       >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-          <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2z"/>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>
+          <line x1="12" y1="2" x2="12" y2="5"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="5" y2="12"/>
+          <line x1="19" y1="12" x2="22" y2="12"/>
+          <line x1="4.93" y1="4.93" x2="6.76" y2="6.76"/>
+          <line x1="17.24" y1="17.24" x2="19.07" y2="19.07"/>
+          <line x1="4.93" y1="19.07" x2="6.76" y2="17.24"/>
+          <line x1="17.24" y1="6.76" x2="19.07" y2="4.93"/>
         </svg>
       </button>
     </div>
