@@ -4,7 +4,7 @@ const path = require('path');
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize';
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
-const SCOPES = 'user-read-currently-playing user-read-playback-state';
+const SCOPES = 'user-read-currently-playing user-read-playback-state user-modify-playback-state';
 
 const TOKEN_PATH = process.env.TOKEN_PATH || path.join(__dirname, '..', '..', '.tokens.json');
 

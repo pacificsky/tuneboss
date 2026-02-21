@@ -6,7 +6,12 @@
     />
     <TrackProgress
       :playback="playback"
+      :isPlaying="isPlaying"
       class="now-playing__progress"
+    />
+    <PlaybackControls
+      :isPlaying="isPlaying"
+      @control="$emit('playback-control', $event)"
     />
     <TrackInfo
       :title="track?.title"
@@ -33,18 +38,20 @@
 import AlbumArt from './AlbumArt.vue'
 import TrackInfo from './TrackInfo.vue'
 import TrackProgress from './TrackProgress.vue'
+import PlaybackControls from './PlaybackControls.vue'
 import SpectrumAnalyzer from './SpectrumAnalyzer.vue'
 
 defineProps({
   track: { type: Object, default: null },
   playback: { type: Object, default: () => ({ position: 0, timestamp: Date.now() }) },
+  isPlaying: { type: Boolean, default: true },
   spectrumColors: { type: Object, default: null },
   enableSpectrum: { type: Boolean, default: true },
   wakeLockSupported: { type: Boolean, default: false },
   wakeLockActive: { type: Boolean, default: false }
 })
 
-defineEmits(['colors-extracted', 'toggle-wake-lock'])
+defineEmits(['colors-extracted', 'toggle-wake-lock', 'playback-control'])
 </script>
 
 <style scoped>

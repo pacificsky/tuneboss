@@ -16,7 +16,8 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
-  playback: { type: Object, default: () => ({ position: 0, duration: 0, timestamp: Date.now() }) }
+  playback: { type: Object, default: () => ({ position: 0, duration: 0, timestamp: Date.now() }) },
+  isPlaying: { type: Boolean, default: true }
 })
 
 const progressPercent = ref(0)
@@ -42,7 +43,7 @@ function update() {
     return
   }
 
-  const elapsed = p.position + (Date.now() - p.timestamp)
+  const elapsed = props.isPlaying ? p.position + (Date.now() - p.timestamp) : p.position
   const clamped = Math.max(0, Math.min(elapsed, p.duration))
 
   progressPercent.value = (clamped / p.duration) * 100
