@@ -149,7 +149,7 @@ const SEGMENT_HEIGHT = 8
 
 // Dot-grid rendering (Sony boombox LED-matrix style)
 const DOT_GRID_COLS = 4
-const DOT_GRID_ROWS = 2
+const DOT_GRID_ROWS = 1
 const DOT_GAP = 1 // thin dark line between cells
 
 // Default fallback colors (cyan / red like the reference image)
