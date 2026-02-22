@@ -30,9 +30,21 @@ const SMOOTH_FACTOR = 0.3
 const CALIBRATION_FRAMES = 120 // ~2s at 60 fps
 const NOISE_MARGIN = 1.3      // subtract 130% of measured noise for a clean floor
 
-// Per-band gain curve to compensate for iPhone mic's high-frequency rolloff.
-// Lower bands (0–3) get no boost; upper bands (7–9) get progressively more.
-const BAND_GAIN = [1.0, 1.0, 1.0, 1.0, 1.1, 1.3, 1.6, 2.0, 2.5, 3.0]
+// Perceptual weighting curve inspired by A-weighting (ISO 61672).
+//
+// Compensates for two effects that starve upper frequency bands on the display:
+//   1. Music's natural spectral slope — energy drops ~3 dB/octave, so bass
+//      dominates while treble barely registers on the mic.
+//   2. Phone-mic rolloff — sensitivity drops above ~4 kHz.
+//
+// Bass bands stay at unity (per-band auto-normalization already tames their
+// excess energy).  Upper bands get progressive boost so the display reflects
+// perceived loudness rather than raw energy.
+//
+// Band centers (Hz):  35    95   212   424   849  1697  3394  6197 10583 16733
+// A-weight (dB):     -39  -19.5 -10.3 -4.5  -0.7 +1.1  +1.2  -0.1 -3.0  -7.0
+// + spectral tilt & mic comp → combined linear gain:
+const BAND_GAIN = [1.0, 1.0, 1.0, 1.0, 1.2, 1.8, 3.0, 5.0, 7.5, 10.0]
 
 export function useMicrophoneAnalyzer() {
   const isSupported = ref(
