@@ -3,11 +3,10 @@ import { ref, onUnmounted } from 'vue'
 const NUM_BANDS = 10
 const FFT_SIZE = 2048
 
-// Frequency band edges (Hz) for 10 bands, weighted toward the low end where
-// a phone mic captures the most usable data.  Seven bands cover 20–1000 Hz
-// (roughly octave spacing in the bass/mid range), then three wider bands
-// cover the upper frequencies where mic signal is sparse.
-const BAND_EDGES = [20, 55, 110, 200, 350, 600, 1000, 1800, 3200, 8000, 20000]
+// Frequency band edges (Hz) for 10 bands.  Nine bands cover 20–2400 Hz with
+// roughly octave spacing where the phone mic has strong signal; the final band
+// lumps all upper frequencies (2400–20 kHz) into a single wide bar.
+const BAND_EDGES = [20, 55, 100, 160, 250, 400, 630, 1000, 1500, 2400, 20000]
 
 // Music detection: we look for sustained energy spread across multiple bands.
 // Pure noise or a single transient (door slam) won't trigger this.
@@ -32,12 +31,12 @@ const SMOOTH_FACTOR = 0.3
 const CALIBRATION_FRAMES = 120 // ~2s at 60 fps
 const NOISE_MARGIN = 1.3      // subtract 130% of measured noise for a clean floor
 
-// Perceptual weighting curve (A-weighting + spectral tilt + mic rolloff).
-// Lower bands have good mic signal and need no boost; upper bands get
-// progressive gain to compensate for music's spectral slope and mic rolloff.
+// Perceptual weighting.  Bands 0–8 sit in the mic's sweet spot and need no
+// boost.  Band 9 spans 2400–20 kHz — its average is diluted by hundreds of
+// near-silent high-frequency bins, so it gets an 8× gain to compensate.
 //
-// Band centers (Hz):  33    78   148   265   458   775  1342  2400  5060 12649
-const BAND_GAIN = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.2, 2.0, 4.5, 9.0]
+// Band centers (Hz):  33    74   126   200   316   502   794  1225  1897  6928
+const BAND_GAIN = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.2, 8.0]
 
 export function useMicrophoneAnalyzer() {
   const isSupported = ref(
