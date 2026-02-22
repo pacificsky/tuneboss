@@ -72,7 +72,8 @@ watch(() => props.src, () => {
 
 <style scoped>
 .album-art {
-  width: 100%;
+  flex: 0 1 320px;
+  min-height: 0;
   max-width: 320px;
   aspect-ratio: 1;
   border-radius: 12px;

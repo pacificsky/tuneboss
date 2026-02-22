@@ -59,7 +59,7 @@ function smoothstep(t) {
 const FADE_IN_DURATION = 1.5  // seconds to ramp up on new track
 const FADE_OUT_WINDOW = 5     // seconds before track end to start fading
 
-export function useAudioAnalysis(trackId, playback) {
+export function useAudioAnalysis(trackId, playback, isPlaying) {
   const bands = ref(new Array(NUM_BANDS).fill(0))
   const peaks = ref(new Array(NUM_BANDS).fill(0))
   const fade = ref(1)
@@ -108,7 +108,24 @@ export function useAudioAnalysis(trackId, playback) {
   const SMOOTH_FACTOR = 0.25
 
   function animate() {
-    if (!oscillators.length) {
+    if (!oscillators.length || (isPlaying && !isPlaying.value)) {
+      // Paused or no track — decay bands toward zero
+      const curBands = bands.value
+      const curPeaks = peaks.value
+      let anyActive = false
+      const newBands = []
+      const newPeaks = []
+      for (let i = 0; i < NUM_BANDS; i++) {
+        const b = curBands[i] * 0.92
+        const p = Math.max(0, curPeaks[i] - PEAK_DECAY)
+        newBands.push(b < 0.001 ? 0 : b)
+        newPeaks.push(p)
+        if (b > 0.001 || p > 0.001) anyActive = true
+      }
+      if (anyActive) {
+        bands.value = newBands
+        peaks.value = newPeaks
+      }
       animFrame = requestAnimationFrame(animate)
       return
     }

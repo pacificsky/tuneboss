@@ -6,7 +6,12 @@
     />
     <TrackProgress
       :playback="playback"
+      :isPlaying="isPlaying"
       class="now-playing__progress"
+    />
+    <PlaybackControls
+      :isPlaying="isPlaying"
+      @control="$emit('playback-control', $event)"
     />
     <TrackInfo
       :title="track?.title"
@@ -17,6 +22,7 @@
       v-if="enableSpectrum"
       :trackId="track?.trackId"
       :playback="playback"
+      :isPlaying="isPlaying"
       :spectrumColors="spectrumColors"
       :wakeLockSupported="wakeLockSupported"
       :wakeLockActive="wakeLockActive"
@@ -33,18 +39,20 @@
 import AlbumArt from './AlbumArt.vue'
 import TrackInfo from './TrackInfo.vue'
 import TrackProgress from './TrackProgress.vue'
+import PlaybackControls from './PlaybackControls.vue'
 import SpectrumAnalyzer from './SpectrumAnalyzer.vue'
 
 defineProps({
   track: { type: Object, default: null },
   playback: { type: Object, default: () => ({ position: 0, timestamp: Date.now() }) },
+  isPlaying: { type: Boolean, default: true },
   spectrumColors: { type: Object, default: null },
   enableSpectrum: { type: Boolean, default: true },
   wakeLockSupported: { type: Boolean, default: false },
   wakeLockActive: { type: Boolean, default: false }
 })
 
-defineEmits(['colors-extracted', 'toggle-wake-lock'])
+defineEmits(['colors-extracted', 'toggle-wake-lock', 'playback-control'])
 </script>
 
 <style scoped>
@@ -52,14 +60,12 @@ defineEmits(['colors-extracted', 'toggle-wake-lock'])
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.25rem;
+  justify-content: center;
+  gap: 0.75rem;
   width: 100%;
-  padding: 2rem 1.5rem;
-}
-
-.now-playing__progress {
-  margin-top: 0.75rem;
-  margin-bottom: -1rem;
+  flex: 1;
+  min-height: 0;
+  padding: 1rem 1.5rem;
 }
 
 .now-playing__source {
@@ -71,7 +77,6 @@ defineEmits(['colors-extracted', 'toggle-wake-lock'])
   letter-spacing: 0.1em;
   text-transform: uppercase;
   opacity: 0.3;
-  margin-top: 0.5rem;
 }
 
 .source-dot {

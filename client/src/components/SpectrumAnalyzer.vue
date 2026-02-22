@@ -70,6 +70,7 @@ import { useMicrophoneAnalyzer } from '../composables/useMicrophoneAnalyzer.js'
 const props = defineProps({
   trackId: { type: String, default: null },
   playback: { type: Object, default: () => ({ position: 0, timestamp: Date.now() }) },
+  isPlaying: { type: Boolean, default: true },
   spectrumColors: { type: Object, default: null },
   wakeLockSupported: { type: Boolean, default: false },
   wakeLockActive: { type: Boolean, default: false }
@@ -84,7 +85,8 @@ const canvasHeight = 100
 // Procedural spectrum (existing — always runs as fallback)
 const { bands, peaks } = useAudioAnalysis(
   toRef(props, 'trackId'),
-  toRef(props, 'playback')
+  toRef(props, 'playback'),
+  toRef(props, 'isPlaying')
 )
 
 // Microphone-based real spectrum

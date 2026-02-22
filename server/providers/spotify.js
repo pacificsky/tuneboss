@@ -6,10 +6,12 @@ const POLL_INTERVAL = 3000;
 class SpotifyProvider {
   constructor() {
     this.currentTrackId = null;
+    this.isPlaying = false;
     this.pollTimer = null;
     this.onTrackUpdate = null;
     this.onPositionUpdate = null;
     this.onPlaybackStopped = null;
+    this.onPlaybackPaused = null;
   }
 
   start() {
@@ -40,6 +42,7 @@ class SpotifyProvider {
       if (res.status === 204) {
         if (this.currentTrackId) {
           this.currentTrackId = null;
+          this.isPlaying = false;
           this.onPlaybackStopped?.();
         }
         return;
@@ -58,40 +61,90 @@ class SpotifyProvider {
       const trackId = data.item.id;
       const isPlaying = data.is_playing;
 
-      if (!isPlaying) {
-        if (this.currentTrackId) {
-          this.currentTrackId = null;
-          this.onPlaybackStopped?.();
-        }
+      const trackData = {
+        source: 'spotify',
+        trackId,
+        title: data.item.name,
+        artist: data.item.artists.map(a => a.name).join(', '),
+        album: data.item.album.name,
+        albumArt: data.item.album.images[0]?.url || null,
+        isPlaying,
+        position: data.progress_ms,
+        duration: data.item.duration_ms
+      };
+
+      // Track changed — emit full update regardless of play state
+      if (trackId !== this.currentTrackId) {
+        this.currentTrackId = trackId;
+        this.isPlaying = isPlaying;
+        this.onTrackUpdate?.(trackData);
         return;
       }
 
-      // Emit position update every poll
-      this.onPositionUpdate?.({
-        position: data.progress_ms,
-        duration: data.item.duration_ms
-      });
+      // Play state changed on the same track
+      if (isPlaying !== this.isPlaying) {
+        this.isPlaying = isPlaying;
+        if (isPlaying) {
+          // Resumed — emit full track update to refresh UI
+          this.onTrackUpdate?.(trackData);
+        } else {
+          // Paused — notify with current track data
+          this.onPlaybackPaused?.(trackData);
+        }
+      }
 
-      // Track changed — emit full update
-      if (trackId !== this.currentTrackId) {
-        this.currentTrackId = trackId;
-
-        const trackData = {
-          source: 'spotify',
-          trackId,
-          title: data.item.name,
-          artist: data.item.artists.map(a => a.name).join(', '),
-          album: data.item.album.name,
-          albumArt: data.item.album.images[0]?.url || null,
-          isPlaying: true,
+      // Emit position update every poll (only when playing)
+      if (isPlaying) {
+        this.onPositionUpdate?.({
           position: data.progress_ms,
           duration: data.item.duration_ms
-        };
-
-        this.onTrackUpdate?.(trackData);
+        });
       }
     } catch (err) {
       console.error('[spotify] Poll error:', err.message);
+    }
+  }
+
+  // Playback control methods
+  async pause() {
+    return this._controlRequest('PUT', '/me/player/pause');
+  }
+
+  async play() {
+    return this._controlRequest('PUT', '/me/player/play');
+  }
+
+  async next() {
+    return this._controlRequest('POST', '/me/player/next');
+  }
+
+  async previous() {
+    return this._controlRequest('POST', '/me/player/previous');
+  }
+
+  async _controlRequest(method, endpoint) {
+    const token = await getValidAccessToken();
+    if (!token) {
+      console.warn('[spotify] No token for playback control');
+      return false;
+    }
+
+    try {
+      const res = await fetch(`${SPOTIFY_API}${endpoint}`, {
+        method,
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('[spotify] Control %s failed (%d): %s', endpoint, res.status, text);
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.error('[spotify] Control %s error: %s', endpoint, err.message);
+      return false;
     }
   }
 }

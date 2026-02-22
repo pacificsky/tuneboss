@@ -17,6 +17,12 @@ class Aggregator {
       this.io.emit('playback-position', position);
     };
 
+    this.spotify.onPlaybackPaused = (track) => {
+      this.currentTrack = track;
+      console.log('[aggregator] Paused: %s — %s', track.title, track.artist);
+      this.io.emit('playback-paused', track);
+    };
+
     this.spotify.onPlaybackStopped = () => {
       this.currentTrack = null;
       console.log('[aggregator] Playback stopped');
@@ -28,6 +34,7 @@ class Aggregator {
     this.clientCount++;
     console.log('[aggregator] Client connected (%d active)', this.clientCount);
     this.syncClient(socket);
+    this.setupControlListeners(socket);
     if (this.clientCount === 1) {
       this.spotify.start();
     }
@@ -47,6 +54,37 @@ class Aggregator {
     if (this.currentTrack) {
       socket.emit('now-playing', this.currentTrack);
     }
+  }
+
+  // Listen for playback control events from a client
+  setupControlListeners(socket) {
+    socket.on('playback-control', async (action) => {
+      console.log('[aggregator] Playback control: %s', action);
+
+      let success = false;
+      switch (action) {
+        case 'play':
+          success = await this.spotify.play();
+          break;
+        case 'pause':
+          success = await this.spotify.pause();
+          break;
+        case 'next':
+          success = await this.spotify.next();
+          break;
+        case 'previous':
+          success = await this.spotify.previous();
+          break;
+        default:
+          console.warn('[aggregator] Unknown control action: %s', action);
+          return;
+      }
+
+      // Re-poll immediately so the UI updates fast
+      if (success) {
+        setTimeout(() => this.spotify.poll(), 300);
+      }
+    });
   }
 }
 

@@ -10,12 +10,14 @@
       v-if="connected && authenticated && track"
       :track="track"
       :playback="playback"
+      :isPlaying="isPlaying"
       :spectrumColors="spectrumColors"
       :enableSpectrum="enableSpectrum"
       :wakeLockSupported="wakeLockSupported"
       :wakeLockActive="wakeLockActive"
       @toggle-wake-lock="toggleWakeLock"
       @colors-extracted="onColorsExtracted"
+      @playback-control="onPlaybackControl"
     />
     <div v-else-if="connected && authenticated && !track" class="idle-state">
       <div class="idle-icon">♪</div>
@@ -57,6 +59,7 @@ const enableSpectrum = ref(true)
 const enableTrackWipe = ref(false)
 const trackWipeInterval = ref(10)
 const track = ref(null)
+const isPlaying = ref(true)
 const playback = ref({ position: 0, duration: 0, timestamp: Date.now() })
 const colors = ref({ bg: '#121212', text: '#ffffff' })
 const spectrumColors = ref(null)
@@ -69,6 +72,10 @@ const themeStyles = computed(() => ({
   backgroundColor: colors.value.bg,
   color: colors.value.text
 }))
+
+function onPlaybackControl(action) {
+  if (socket) socket.emit('playback-control', action)
+}
 
 function onColorsExtracted(extracted) {
   colors.value = extracted
@@ -122,6 +129,12 @@ onMounted(() => {
   socket.on('now-playing', (data) => {
     authenticated.value = true
     track.value = data
+    isPlaying.value = data.isPlaying !== false
+  })
+
+  socket.on('playback-paused', (data) => {
+    track.value = data
+    isPlaying.value = false
   })
 
   socket.on('playback-position', (data) => {
@@ -130,6 +143,7 @@ onMounted(() => {
 
   socket.on('playback-stopped', () => {
     track.value = null
+    isPlaying.value = false
   })
 })
 

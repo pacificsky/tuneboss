@@ -4,7 +4,7 @@ const path = require('path');
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize';
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
-const SCOPES = 'user-read-currently-playing user-read-playback-state';
+const SCOPES = 'user-read-currently-playing user-read-playback-state user-modify-playback-state';
 
 const TOKEN_PATH = process.env.TOKEN_PATH || path.join(__dirname, '..', '..', '.tokens.json');
 
@@ -69,7 +69,8 @@ function setupSpotifyAuth(app) {
     const { code, error } = req.query;
 
     if (error) {
-      return res.status(400).send(`Spotify auth error: ${error}`);
+      console.warn('[auth] Spotify auth denied: %s', error);
+      return res.redirect('/');
     }
 
     try {
@@ -83,7 +84,7 @@ function setupSpotifyAuth(app) {
       res.redirect('/');
     } catch (err) {
       console.error('[auth] Token exchange failed:', err.message);
-      res.status(500).send('Authentication failed');
+      res.redirect('/');
     }
   });
 
