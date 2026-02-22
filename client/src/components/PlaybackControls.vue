@@ -2,7 +2,8 @@
   <div class="playback-controls">
     <button
       class="playback-controls__btn"
-      @click="$emit('control', 'previous')"
+      :class="{ 'playback-controls__btn--tap': tapped === 'previous' }"
+      @click="tap('previous')"
       aria-label="Previous track"
     >
       <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
@@ -11,7 +12,8 @@
     </button>
     <button
       class="playback-controls__btn playback-controls__btn--main"
-      @click="$emit('control', isPlaying ? 'pause' : 'play')"
+      :class="{ 'playback-controls__btn--tap': tapped === 'toggle' }"
+      @click="tap(isPlaying ? 'pause' : 'play', 'toggle')"
       :aria-label="isPlaying ? 'Pause' : 'Play'"
     >
       <svg v-if="isPlaying" viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
@@ -23,7 +25,8 @@
     </button>
     <button
       class="playback-controls__btn"
-      @click="$emit('control', 'next')"
+      :class="{ 'playback-controls__btn--tap': tapped === 'next' }"
+      @click="tap('next')"
       aria-label="Next track"
     >
       <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
@@ -34,11 +37,23 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
+
 defineProps({
   isPlaying: { type: Boolean, default: true }
 })
 
-defineEmits(['control'])
+const emit = defineEmits(['control'])
+
+const tapped = ref(null)
+let tapTimer = null
+
+function tap(action, key) {
+  emit('control', action)
+  tapped.value = key || action
+  clearTimeout(tapTimer)
+  tapTimer = setTimeout(() => { tapped.value = null }, 300)
+}
 </script>
 
 <style scoped>
@@ -64,9 +79,8 @@ defineEmits(['control'])
   -webkit-tap-highlight-color: transparent;
 }
 
-.playback-controls__btn:active {
-  transform: scale(0.85);
-  opacity: 1;
+.playback-controls__btn--tap {
+  animation: btn-tap 0.3s ease;
 }
 
 .playback-controls__btn--main {
@@ -75,7 +89,9 @@ defineEmits(['control'])
   padding: 0.6rem;
 }
 
-.playback-controls__btn--main:active {
-  transform: scale(0.9);
+@keyframes btn-tap {
+  0%   { transform: scale(1);    opacity: 0.7; }
+  40%  { transform: scale(0.8);  opacity: 1; }
+  100% { transform: scale(1);    opacity: 0.7; }
 }
 </style>
