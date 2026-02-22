@@ -3,9 +3,11 @@ import { ref, onUnmounted } from 'vue'
 const NUM_BANDS = 10
 const FFT_SIZE = 2048
 
-// Logarithmic frequency band edges (Hz) for 10 perceptual bands.
-// Each band spans roughly one octave in the musically interesting range.
-const BAND_EDGES = [20, 60, 150, 300, 600, 1200, 2400, 4800, 8000, 14000, 20000]
+// Frequency band edges (Hz) for 10 bands, weighted toward the low end where
+// a phone mic captures the most usable data.  Seven bands cover 20–1000 Hz
+// (roughly octave spacing in the bass/mid range), then three wider bands
+// cover the upper frequencies where mic signal is sparse.
+const BAND_EDGES = [20, 55, 110, 200, 350, 600, 1000, 1800, 3200, 8000, 20000]
 
 // Music detection: we look for sustained energy spread across multiple bands.
 // Pure noise or a single transient (door slam) won't trigger this.
@@ -30,21 +32,12 @@ const SMOOTH_FACTOR = 0.3
 const CALIBRATION_FRAMES = 120 // ~2s at 60 fps
 const NOISE_MARGIN = 1.3      // subtract 130% of measured noise for a clean floor
 
-// Perceptual weighting curve inspired by A-weighting (ISO 61672).
+// Perceptual weighting curve (A-weighting + spectral tilt + mic rolloff).
+// Lower bands have good mic signal and need no boost; upper bands get
+// progressive gain to compensate for music's spectral slope and mic rolloff.
 //
-// Compensates for two effects that starve upper frequency bands on the display:
-//   1. Music's natural spectral slope — energy drops ~3 dB/octave, so bass
-//      dominates while treble barely registers on the mic.
-//   2. Phone-mic rolloff — sensitivity drops above ~4 kHz.
-//
-// Bass bands stay at unity (per-band auto-normalization already tames their
-// excess energy).  Upper bands get progressive boost so the display reflects
-// perceived loudness rather than raw energy.
-//
-// Band centers (Hz):  35    95   212   424   849  1697  3394  6197 10583 16733
-// A-weight (dB):     -39  -19.5 -10.3 -4.5  -0.7 +1.1  +1.2  -0.1 -3.0  -7.0
-// + spectral tilt & mic comp → combined linear gain:
-const BAND_GAIN = [1.0, 1.0, 1.0, 1.0, 1.2, 1.8, 3.0, 5.0, 7.5, 10.0]
+// Band centers (Hz):  33    78   148   265   458   775  1342  2400  5060 12649
+const BAND_GAIN = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.2, 2.0, 4.5, 9.0]
 
 export function useMicrophoneAnalyzer() {
   const isSupported = ref(
