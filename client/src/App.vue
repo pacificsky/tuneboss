@@ -13,6 +13,7 @@
       :isPlaying="isPlaying"
       :spectrumColors="spectrumColors"
       :enableSpectrum="enableSpectrum"
+      :spectrumStyle="spectrumStyle"
       :wakeLockSupported="wakeLockSupported"
       :wakeLockActive="wakeLockActive"
       @toggle-wake-lock="toggleWakeLock"
@@ -56,6 +57,7 @@ function toggleWakeLock() {
 const connected = ref(false)
 const authenticated = ref(false)
 const enableSpectrum = ref(true)
+const spectrumStyle = ref('modern')
 const enableTrackWipe = ref(false)
 const trackWipeInterval = ref(10)
 const track = ref(null)
@@ -97,6 +99,7 @@ async function fetchConfig() {
     const res = await fetch('/api/config')
     const data = await res.json()
     enableSpectrum.value = data.enableSpectrum !== false
+    spectrumStyle.value = data.spectrumStyle || 'modern'
     enableTrackWipe.value = data.enableTrackWipe === true
     trackWipeInterval.value = data.trackWipeInterval > 0 ? data.trackWipeInterval : 10
   } catch {
