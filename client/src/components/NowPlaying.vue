@@ -60,8 +60,11 @@ defineEmits(['colors-extracted', 'toggle-wake-lock', 'playback-control'])
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 1.25rem;
   width: 100%;
+  flex: 1;
+  min-height: 0;
   padding: 2rem 1.5rem;
 }
 
