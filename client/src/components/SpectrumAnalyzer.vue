@@ -145,7 +145,12 @@ function onCancelCalibration() {
 const NUM_BANDS = 10
 const BAR_GAP = 4
 const SEGMENT_GAP = 2
-const SEGMENT_HEIGHT = 5
+const SEGMENT_HEIGHT = 8
+
+// Dot-grid rendering (Sony boombox LED-matrix style)
+const DOT_GRID_COLS = 6
+const DOT_GRID_ROWS = 2
+const DOT_RADIUS = 1.2
 
 // Default fallback colors (cyan / red like the reference image)
 const DEFAULT_PRIMARY = [0, 210, 210]
@@ -183,6 +188,26 @@ function deriveHotColor(rgb) {
     Math.min(255, rgb[1] * 0.25),
     Math.min(255, rgb[2] * 0.2)
   ]
+}
+
+// Draw a segment as a grid of small dots instead of a solid rectangle
+function drawDotSegment(ctx, x, y, width, height) {
+  const padX = DOT_RADIUS + 0.5
+  const padY = DOT_RADIUS + 0.5
+  const innerW = width - padX * 2
+  const innerH = height - padY * 2
+  const spacingX = DOT_GRID_COLS > 1 ? innerW / (DOT_GRID_COLS - 1) : 0
+  const spacingY = DOT_GRID_ROWS > 1 ? innerH / (DOT_GRID_ROWS - 1) : 0
+
+  for (let r = 0; r < DOT_GRID_ROWS; r++) {
+    for (let c = 0; c < DOT_GRID_COLS; c++) {
+      const cx = x + padX + c * spacingX
+      const cy = y + padY + r * spacingY
+      ctx.beginPath()
+      ctx.arc(cx, cy, DOT_RADIUS, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
 }
 
 function draw() {
@@ -261,19 +286,19 @@ function draw() {
         ctx.shadowBlur = 4
 
         ctx.fillStyle = `rgb(${Math.round(segColor[0])}, ${Math.round(segColor[1])}, ${Math.round(segColor[2])})`
-        ctx.fillRect(x, segY, barWidth, SEGMENT_HEIGHT)
+        drawDotSegment(ctx, x, segY, barWidth, SEGMENT_HEIGHT)
       } else if (s === peakSegment && peakSegment > 0) {
         // Peak indicator segment
         const peakColor = brighten(primary, 0.5)
         ctx.shadowColor = `rgba(${Math.round(peakColor[0])}, ${Math.round(peakColor[1])}, ${Math.round(peakColor[2])}, 0.5)`
         ctx.shadowBlur = 3
         ctx.fillStyle = `rgba(${Math.round(peakColor[0])}, ${Math.round(peakColor[1])}, ${Math.round(peakColor[2])}, 0.85)`
-        ctx.fillRect(x, segY, barWidth, SEGMENT_HEIGHT)
+        drawDotSegment(ctx, x, segY, barWidth, SEGMENT_HEIGHT)
       } else {
         // Unlit segment — very faint outline for the grid effect
         ctx.shadowBlur = 0
         ctx.fillStyle = 'rgba(255, 255, 255, 0.03)'
-        ctx.fillRect(x, segY, barWidth, SEGMENT_HEIGHT)
+        drawDotSegment(ctx, x, segY, barWidth, SEGMENT_HEIGHT)
       }
     }
 
