@@ -165,6 +165,12 @@ let drawFrame = null
 let blendFactor = 0
 const BLEND_SPEED = 0.04 // ~25 frames (~0.4s) for full transition
 
+// Afterglow: per-band trail that decays slower than the bar itself,
+// drawn as fading segments between the current level and the glow boundary.
+const AFTERGLOW_DECAY = 0.985 // per frame @ 60fps → half-life ~46 frames (~0.77s)
+const AFTERGLOW_MAX_ALPHA = 0.35
+let afterglow = new Array(NUM_BANDS).fill(0)
+
 // Interpolate between two RGB arrays
 function lerpRgb(a, b, t) {
   return [
@@ -265,38 +271,52 @@ function draw() {
     const litSegments = Math.round(bandVal * totalSegments)
     const peakSegment = Math.round(peakVal * totalSegments)
 
+    // Update afterglow: tracks peak (not band) so the glow trails above
+    // the peak indicator too, since the peak itself is a bright element.
+    const glowSource = Math.max(bandVal, peakVal)
+    if (glowSource >= afterglow[i]) {
+      afterglow[i] = glowSource
+    } else {
+      afterglow[i] *= AFTERGLOW_DECAY
+      if (afterglow[i] < 0.01) afterglow[i] = 0
+    }
+    const glowSegments = Math.round(afterglow[i] * totalSegments)
+
     // Draw segments bottom-up
     for (let s = 0; s < totalSegments; s++) {
       const segY = canvasHeight - (s + 1) * (segHeight + SEGMENT_GAP)
       const ratio = s / totalSegments // 0 = bottom, 1 = top
 
-      if (s < litSegments) {
-        // Lit segment: color transitions from primary at bottom to hot at top
-        let segColor
-        if (ratio < 0.65) {
-          // Primary zone — use primary, subtly brighten toward middle
-          segColor = lerpRgb(primary, light, ratio * 0.3)
-        } else if (ratio < 0.85) {
-          // Transition zone — blend primary to hot
-          const t = (ratio - 0.65) / 0.2
-          segColor = lerpRgb(primary, hot, t)
-        } else {
-          // Hot zone — full hot color
-          segColor = hot
-        }
+      // Compute the color for this segment's vertical position
+      let segColor
+      if (ratio < 0.65) {
+        segColor = lerpRgb(primary, light, ratio * 0.3)
+      } else if (ratio < 0.85) {
+        const t = (ratio - 0.65) / 0.2
+        segColor = lerpRgb(primary, hot, t)
+      } else {
+        segColor = hot
+      }
 
-        // Glow effect
+      if (s < litSegments) {
+        // Lit segment
         ctx.shadowColor = `rgba(${Math.round(segColor[0])}, ${Math.round(segColor[1])}, ${Math.round(segColor[2])}, 0.6)`
         ctx.shadowBlur = 4
-
         ctx.fillStyle = `rgb(${Math.round(segColor[0])}, ${Math.round(segColor[1])}, ${Math.round(segColor[2])})`
         drawSegment(ctx, x, segY, barWidth, segHeight, retro)
       } else if (s === peakSegment && peakSegment > 0) {
-        // Peak indicator segment
+        // Peak indicator segment (takes priority over afterglow)
         const peakColor = brighten(primary, 0.5)
         ctx.shadowColor = `rgba(${Math.round(peakColor[0])}, ${Math.round(peakColor[1])}, ${Math.round(peakColor[2])}, 0.5)`
         ctx.shadowBlur = 3
         ctx.fillStyle = `rgba(${Math.round(peakColor[0])}, ${Math.round(peakColor[1])}, ${Math.round(peakColor[2])}, 0.85)`
+        drawSegment(ctx, x, segY, barWidth, segHeight, retro)
+      } else if (s < glowSegments) {
+        // Afterglow: fades from near-current to transparent at the glow boundary
+        const t = (s - litSegments) / Math.max(1, glowSegments - litSegments)
+        const glowAlpha = AFTERGLOW_MAX_ALPHA * (1 - t)
+        ctx.shadowBlur = 0
+        ctx.fillStyle = `rgba(${Math.round(segColor[0])}, ${Math.round(segColor[1])}, ${Math.round(segColor[2])}, ${glowAlpha})`
         drawSegment(ctx, x, segY, barWidth, segHeight, retro)
       } else {
         // Unlit segment — very faint outline for the grid effect

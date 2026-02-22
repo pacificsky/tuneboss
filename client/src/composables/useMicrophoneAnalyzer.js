@@ -3,9 +3,10 @@ import { ref, onUnmounted } from 'vue'
 const NUM_BANDS = 10
 const FFT_SIZE = 2048
 
-// Logarithmic frequency band edges (Hz) for 10 perceptual bands.
-// Each band spans roughly one octave in the musically interesting range.
-const BAND_EDGES = [20, 60, 150, 300, 600, 1200, 2400, 4800, 8000, 14000, 20000]
+// Frequency band edges (Hz) for 10 bands.  Nine bands cover 20–2400 Hz with
+// roughly octave spacing where the phone mic has strong signal; the final band
+// lumps all upper frequencies (2400–20 kHz) into a single wide bar.
+const BAND_EDGES = [20, 55, 100, 160, 250, 400, 630, 1000, 1500, 2400, 20000]
 
 // Music detection: we look for sustained energy spread across multiple bands.
 // Pure noise or a single transient (door slam) won't trigger this.
@@ -17,9 +18,10 @@ const CONFIDENCE_DECAY_RATE = 2
 // Auto-normalization keeps the bars filling the visual range regardless of
 // mic distance or speaker volume.  Fast attack (responds to loud hits),
 // slow decay (doesn't collapse during quiet passages).
-const NORM_ATTACK = 0.12
+const NORM_ATTACK = 0.25
 const NORM_DECAY = 0.0008
-const NORM_MIN = 30 // floor to avoid amplifying silence
+const NORM_MIN = 30      // floor to avoid amplifying silence
+const NORM_HEADROOM = 1.1 // normalize to 110% of running max → steady signal sits ~91%
 
 const PEAK_DECAY = 0.015
 const SMOOTH_FACTOR = 0.3
@@ -30,9 +32,12 @@ const SMOOTH_FACTOR = 0.3
 const CALIBRATION_FRAMES = 120 // ~2s at 60 fps
 const NOISE_MARGIN = 1.3      // subtract 130% of measured noise for a clean floor
 
-// Per-band gain curve to compensate for iPhone mic's high-frequency rolloff.
-// Lower bands (0–3) get no boost; upper bands (7–9) get progressively more.
-const BAND_GAIN = [1.0, 1.0, 1.0, 1.0, 1.1, 1.3, 1.6, 2.0, 2.5, 3.0]
+// Perceptual weighting.  Bands 0–8 sit in the mic's sweet spot and need no
+// boost.  Band 9 spans 2400–20 kHz — its average is diluted by hundreds of
+// near-silent high-frequency bins, so it gets an 8× gain to compensate.
+//
+// Band centers (Hz):  33    74   126   200   316   502   794  1225  1897  6928
+const BAND_GAIN = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.2, 8.0]
 
 export function useMicrophoneAnalyzer() {
   const isSupported = ref(
@@ -54,7 +59,9 @@ export function useMicrophoneAnalyzer() {
   let frequencyData = null
   let bandBinRanges = []
   let confidenceCounter = 0
-  let normMax = NORM_MIN
+  // Per-band normalization: each band tracks its own running maximum so that
+  // quieter high-frequency bands aren't crushed by the dominant bass energy.
+  let normMaxPerBand = new Array(NUM_BANDS).fill(NORM_MIN)
 
   // Noise floor state
   let calibrating = false
@@ -130,18 +137,18 @@ export function useMicrophoneAnalyzer() {
       if (cleaned > 20) activeBandCount++
     }
 
-    // Auto-normalization: track a running maximum with fast attack / slow decay
-    const maxBand = Math.max(...rawBands)
-    if (maxBand > normMax) {
-      normMax += (maxBand - normMax) * NORM_ATTACK
-    } else {
-      normMax = Math.max(NORM_MIN, normMax - normMax * NORM_DECAY)
-    }
-
-    // Normalize bands to 0–1 range
+    // Per-band auto-normalization: each band tracks its own running maximum
+    // with fast attack / slow decay.  NORM_HEADROOM prevents steady-state
+    // signals from pegging to 100% — typical level sits at ~67%, leaving
+    // room for real peaks to punch up to full height.
     const computed = new Array(NUM_BANDS)
     for (let b = 0; b < NUM_BANDS; b++) {
-      computed[b] = Math.min(1, rawBands[b] / normMax)
+      if (rawBands[b] > normMaxPerBand[b]) {
+        normMaxPerBand[b] += (rawBands[b] - normMaxPerBand[b]) * NORM_ATTACK
+      } else {
+        normMaxPerBand[b] = Math.max(NORM_MIN, normMaxPerBand[b] - normMaxPerBand[b] * NORM_DECAY)
+      }
+      computed[b] = Math.min(1, rawBands[b] / (normMaxPerBand[b] * NORM_HEADROOM))
     }
 
     // Music detection: sustained energy across multiple frequency bands
@@ -203,7 +210,7 @@ export function useMicrophoneAnalyzer() {
       bandBinRanges = calculateBandRanges(audioContext.sampleRate)
 
       confidenceCounter = 0
-      normMax = NORM_MIN
+      normMaxPerBand = new Array(NUM_BANDS).fill(NORM_MIN)
       isListening.value = true
 
       return true
@@ -255,7 +262,7 @@ export function useMicrophoneAnalyzer() {
     isCalibrating.value = false
     isMusicDetected.value = false
     confidenceCounter = 0
-    normMax = NORM_MIN
+    normMaxPerBand = new Array(NUM_BANDS).fill(NORM_MIN)
     calibrating = false
     calibrationCount = 0
     calibrationAccum = null
