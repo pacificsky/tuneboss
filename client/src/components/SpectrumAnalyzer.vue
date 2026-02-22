@@ -271,9 +271,11 @@ function draw() {
     const litSegments = Math.round(bandVal * totalSegments)
     const peakSegment = Math.round(peakVal * totalSegments)
 
-    // Update afterglow: instant attack, slow decay
-    if (bandVal >= afterglow[i]) {
-      afterglow[i] = bandVal
+    // Update afterglow: tracks peak (not band) so the glow trails above
+    // the peak indicator too, since the peak itself is a bright element.
+    const glowSource = Math.max(bandVal, peakVal)
+    if (glowSource >= afterglow[i]) {
+      afterglow[i] = glowSource
     } else {
       afterglow[i] *= AFTERGLOW_DECAY
       if (afterglow[i] < 0.01) afterglow[i] = 0
