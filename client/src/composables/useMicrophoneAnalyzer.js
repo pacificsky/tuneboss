@@ -54,7 +54,9 @@ export function useMicrophoneAnalyzer() {
   let frequencyData = null
   let bandBinRanges = []
   let confidenceCounter = 0
-  let normMax = NORM_MIN
+  // Per-band normalization: each band tracks its own running maximum so that
+  // quieter high-frequency bands aren't crushed by the dominant bass energy.
+  let normMaxPerBand = new Array(NUM_BANDS).fill(NORM_MIN)
 
   // Noise floor state
   let calibrating = false
@@ -130,18 +132,17 @@ export function useMicrophoneAnalyzer() {
       if (cleaned > 20) activeBandCount++
     }
 
-    // Auto-normalization: track a running maximum with fast attack / slow decay
-    const maxBand = Math.max(...rawBands)
-    if (maxBand > normMax) {
-      normMax += (maxBand - normMax) * NORM_ATTACK
-    } else {
-      normMax = Math.max(NORM_MIN, normMax - normMax * NORM_DECAY)
-    }
-
-    // Normalize bands to 0–1 range
+    // Per-band auto-normalization: each band tracks its own running maximum
+    // with fast attack / slow decay. This ensures high-frequency bands (which
+    // carry far less energy than bass) fill their visual range independently.
     const computed = new Array(NUM_BANDS)
     for (let b = 0; b < NUM_BANDS; b++) {
-      computed[b] = Math.min(1, rawBands[b] / normMax)
+      if (rawBands[b] > normMaxPerBand[b]) {
+        normMaxPerBand[b] += (rawBands[b] - normMaxPerBand[b]) * NORM_ATTACK
+      } else {
+        normMaxPerBand[b] = Math.max(NORM_MIN, normMaxPerBand[b] - normMaxPerBand[b] * NORM_DECAY)
+      }
+      computed[b] = Math.min(1, rawBands[b] / normMaxPerBand[b])
     }
 
     // Music detection: sustained energy across multiple frequency bands
@@ -203,7 +204,7 @@ export function useMicrophoneAnalyzer() {
       bandBinRanges = calculateBandRanges(audioContext.sampleRate)
 
       confidenceCounter = 0
-      normMax = NORM_MIN
+      normMaxPerBand = new Array(NUM_BANDS).fill(NORM_MIN)
       isListening.value = true
 
       return true
@@ -255,7 +256,7 @@ export function useMicrophoneAnalyzer() {
     isCalibrating.value = false
     isMusicDetected.value = false
     confidenceCounter = 0
-    normMax = NORM_MIN
+    normMaxPerBand = new Array(NUM_BANDS).fill(NORM_MIN)
     calibrating = false
     calibrationCount = 0
     calibrationAccum = null
