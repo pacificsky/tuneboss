@@ -52,7 +52,7 @@ function tap(action, key) {
   emit('control', action)
   tapped.value = key || action
   clearTimeout(tapTimer)
-  tapTimer = setTimeout(() => { tapped.value = null }, 600)
+  tapTimer = setTimeout(() => { tapped.value = null }, 300)
 }
 </script>
 
@@ -80,14 +80,7 @@ function tap(action, key) {
 }
 
 .playback-controls__btn--tap {
-  opacity: 1;
-  transform: scale(0.85);
-  background: rgba(255, 255, 255, 0.15);
-  transition: opacity 0.05s, transform 0.1s ease, background 0.05s;
-}
-
-.playback-controls__btn:not(.playback-controls__btn--tap) {
-  transition: opacity 0.4s ease, transform 0.3s ease, background 0.4s ease;
+  animation: btn-tap 0.3s ease;
 }
 
 .playback-controls__btn--main {
@@ -96,7 +89,9 @@ function tap(action, key) {
   padding: 0.6rem;
 }
 
-.playback-controls__btn--main.playback-controls__btn--tap {
-  background: rgba(255, 255, 255, 0.25);
+@keyframes btn-tap {
+  0%   { transform: scale(1);    opacity: 0.7; }
+  40%  { transform: scale(0.8);  opacity: 1; }
+  100% { transform: scale(1);    opacity: 0.7; }
 }
 </style>
