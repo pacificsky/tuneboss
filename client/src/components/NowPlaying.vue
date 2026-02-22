@@ -22,6 +22,7 @@
       v-if="enableSpectrum"
       :trackId="track?.trackId"
       :playback="playback"
+      :isPlaying="isPlaying"
       :spectrumColors="spectrumColors"
       :wakeLockSupported="wakeLockSupported"
       :wakeLockActive="wakeLockActive"
