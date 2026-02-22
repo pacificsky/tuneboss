@@ -148,9 +148,9 @@ const SEGMENT_GAP = 2
 const SEGMENT_HEIGHT = 8
 
 // Dot-grid rendering (Sony boombox LED-matrix style)
-const DOT_GRID_COLS = 6
+const DOT_GRID_COLS = 4
 const DOT_GRID_ROWS = 2
-const DOT_RADIUS = 1.2
+const DOT_GAP = 1 // thin dark line between cells
 
 // Default fallback colors (cyan / red like the reference image)
 const DEFAULT_PRIMARY = [0, 210, 210]
@@ -190,22 +190,16 @@ function deriveHotColor(rgb) {
   ]
 }
 
-// Draw a segment as a grid of small dots instead of a solid rectangle
+// Draw a segment as a grid of tightly-packed square cells with thin dark gaps
 function drawDotSegment(ctx, x, y, width, height) {
-  const padX = DOT_RADIUS + 0.5
-  const padY = DOT_RADIUS + 0.5
-  const innerW = width - padX * 2
-  const innerH = height - padY * 2
-  const spacingX = DOT_GRID_COLS > 1 ? innerW / (DOT_GRID_COLS - 1) : 0
-  const spacingY = DOT_GRID_ROWS > 1 ? innerH / (DOT_GRID_ROWS - 1) : 0
+  const cellW = (width - (DOT_GRID_COLS - 1) * DOT_GAP) / DOT_GRID_COLS
+  const cellH = (height - (DOT_GRID_ROWS - 1) * DOT_GAP) / DOT_GRID_ROWS
 
   for (let r = 0; r < DOT_GRID_ROWS; r++) {
     for (let c = 0; c < DOT_GRID_COLS; c++) {
-      const cx = x + padX + c * spacingX
-      const cy = y + padY + r * spacingY
-      ctx.beginPath()
-      ctx.arc(cx, cy, DOT_RADIUS, 0, Math.PI * 2)
-      ctx.fill()
+      const cx = x + c * (cellW + DOT_GAP)
+      const cy = y + r * (cellH + DOT_GAP)
+      ctx.fillRect(cx, cy, cellW, cellH)
     }
   }
 }
