@@ -21,7 +21,7 @@ const CONFIDENCE_DECAY_RATE = 2
 const NORM_ATTACK = 0.25
 const NORM_DECAY = 0.0008
 const NORM_MIN = 30      // floor to avoid amplifying silence
-const NORM_HEADROOM = 1.5 // normalize to 150% of running max → steady signal sits ~67%
+const NORM_HEADROOM = 1.25 // normalize to 125% of running max → steady signal sits ~80%
 
 const PEAK_DECAY = 0.015
 const SMOOTH_FACTOR = 0.3
