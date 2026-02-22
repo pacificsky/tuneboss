@@ -61,16 +61,11 @@ defineEmits(['colors-extracted', 'toggle-wake-lock', 'playback-control'])
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.25rem;
+  gap: 0.75rem;
   width: 100%;
   flex: 1;
   min-height: 0;
-  padding: 2rem 1.5rem;
-}
-
-.now-playing__progress {
-  margin-top: 0.75rem;
-  margin-bottom: -1rem;
+  padding: 1rem 1.5rem;
 }
 
 .now-playing__source {
@@ -82,7 +77,6 @@ defineEmits(['colors-extracted', 'toggle-wake-lock', 'playback-control'])
   letter-spacing: 0.1em;
   text-transform: uppercase;
   opacity: 0.3;
-  margin-top: 0.5rem;
 }
 
 .source-dot {
