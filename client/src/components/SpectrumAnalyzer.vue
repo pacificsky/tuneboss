@@ -167,7 +167,7 @@ const BLEND_SPEED = 0.04 // ~25 frames (~0.4s) for full transition
 
 // Afterglow: per-band trail that decays slower than the bar itself,
 // drawn as fading segments between the current level and the glow boundary.
-const AFTERGLOW_DECAY = 0.965 // per frame @ 60fps → half-life ~20 frames (~0.33s)
+const AFTERGLOW_DECAY = 0.985 // per frame @ 60fps → half-life ~46 frames (~0.77s)
 const AFTERGLOW_MAX_ALPHA = 0.35
 let afterglow = new Array(NUM_BANDS).fill(0)
 
