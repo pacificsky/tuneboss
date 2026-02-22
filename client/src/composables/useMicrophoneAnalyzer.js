@@ -18,9 +18,10 @@ const CONFIDENCE_DECAY_RATE = 2
 // Auto-normalization keeps the bars filling the visual range regardless of
 // mic distance or speaker volume.  Fast attack (responds to loud hits),
 // slow decay (doesn't collapse during quiet passages).
-const NORM_ATTACK = 0.12
+const NORM_ATTACK = 0.25
 const NORM_DECAY = 0.0008
-const NORM_MIN = 30 // floor to avoid amplifying silence
+const NORM_MIN = 30      // floor to avoid amplifying silence
+const NORM_HEADROOM = 1.5 // normalize to 150% of running max → steady signal sits ~67%
 
 const PEAK_DECAY = 0.015
 const SMOOTH_FACTOR = 0.3
@@ -137,8 +138,9 @@ export function useMicrophoneAnalyzer() {
     }
 
     // Per-band auto-normalization: each band tracks its own running maximum
-    // with fast attack / slow decay. This ensures high-frequency bands (which
-    // carry far less energy than bass) fill their visual range independently.
+    // with fast attack / slow decay.  NORM_HEADROOM prevents steady-state
+    // signals from pegging to 100% — typical level sits at ~67%, leaving
+    // room for real peaks to punch up to full height.
     const computed = new Array(NUM_BANDS)
     for (let b = 0; b < NUM_BANDS; b++) {
       if (rawBands[b] > normMaxPerBand[b]) {
@@ -146,7 +148,7 @@ export function useMicrophoneAnalyzer() {
       } else {
         normMaxPerBand[b] = Math.max(NORM_MIN, normMaxPerBand[b] - normMaxPerBand[b] * NORM_DECAY)
       }
-      computed[b] = Math.min(1, rawBands[b] / normMaxPerBand[b])
+      computed[b] = Math.min(1, rawBands[b] / (normMaxPerBand[b] * NORM_HEADROOM))
     }
 
     // Music detection: sustained energy across multiple frequency bands
