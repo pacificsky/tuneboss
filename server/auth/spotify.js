@@ -69,7 +69,8 @@ function setupSpotifyAuth(app) {
     const { code, error } = req.query;
 
     if (error) {
-      return res.status(400).send(`Spotify auth error: ${error}`);
+      console.warn('[auth] Spotify auth denied: %s', error);
+      return res.redirect('/');
     }
 
     try {
@@ -83,7 +84,7 @@ function setupSpotifyAuth(app) {
       res.redirect('/');
     } catch (err) {
       console.error('[auth] Token exchange failed:', err.message);
-      res.status(500).send('Authentication failed');
+      res.redirect('/');
     }
   });
 
