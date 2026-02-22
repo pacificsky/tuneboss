@@ -24,6 +24,7 @@
       :playback="playback"
       :isPlaying="isPlaying"
       :spectrumColors="spectrumColors"
+      :spectrumStyle="spectrumStyle"
       :wakeLockSupported="wakeLockSupported"
       :wakeLockActive="wakeLockActive"
       @toggle-wake-lock="$emit('toggle-wake-lock')"
@@ -48,6 +49,7 @@ defineProps({
   isPlaying: { type: Boolean, default: true },
   spectrumColors: { type: Object, default: null },
   enableSpectrum: { type: Boolean, default: true },
+  spectrumStyle: { type: String, default: 'modern' },
   wakeLockSupported: { type: Boolean, default: false },
   wakeLockActive: { type: Boolean, default: false }
 })

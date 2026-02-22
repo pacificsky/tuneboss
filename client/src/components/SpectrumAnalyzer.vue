@@ -72,6 +72,7 @@ const props = defineProps({
   playback: { type: Object, default: () => ({ position: 0, timestamp: Date.now() }) },
   isPlaying: { type: Boolean, default: true },
   spectrumColors: { type: Object, default: null },
+  spectrumStyle: { type: String, default: 'modern' },
   wakeLockSupported: { type: Boolean, default: false },
   wakeLockActive: { type: Boolean, default: false }
 })
@@ -145,7 +146,13 @@ function onCancelCalibration() {
 const NUM_BANDS = 10
 const BAR_GAP = 4
 const SEGMENT_GAP = 2
-const SEGMENT_HEIGHT = 5
+const SEGMENT_HEIGHT_MODERN = 5
+const SEGMENT_HEIGHT_RETRO = 8
+
+// Retro dot-grid rendering (Sony boombox LED-matrix style)
+const DOT_GRID_COLS = 4
+const DOT_GRID_ROWS = 1
+const DOT_GAP = 1 // thin dark line between cells
 
 // Default fallback colors (cyan / red like the reference image)
 const DEFAULT_PRIMARY = [0, 210, 210]
@@ -185,6 +192,25 @@ function deriveHotColor(rgb) {
   ]
 }
 
+// Draw a segment — style-dependent
+function drawSegment(ctx, x, y, width, height, retro) {
+  if (!retro) {
+    ctx.fillRect(x, y, width, height)
+    return
+  }
+  // Retro: grid of tightly-packed square cells with thin dark gaps
+  const cellW = (width - (DOT_GRID_COLS - 1) * DOT_GAP) / DOT_GRID_COLS
+  const cellH = (height - (DOT_GRID_ROWS - 1) * DOT_GAP) / DOT_GRID_ROWS
+
+  for (let r = 0; r < DOT_GRID_ROWS; r++) {
+    for (let c = 0; c < DOT_GRID_COLS; c++) {
+      const cx = x + c * (cellW + DOT_GAP)
+      const cy = y + r * (cellH + DOT_GAP)
+      ctx.fillRect(cx, cy, cellW, cellH)
+    }
+  }
+}
+
 function draw() {
   const canvas = canvasRef.value
   if (!canvas) {
@@ -216,10 +242,13 @@ function draw() {
   const light = sc ? sc.light : DEFAULT_LIGHT
   const hot = deriveHotColor(primary)
 
+  const retro = props.spectrumStyle === 'retro'
+  const segHeight = retro ? SEGMENT_HEIGHT_RETRO : SEGMENT_HEIGHT_MODERN
+
   const totalGaps = (NUM_BANDS - 1) * BAR_GAP
   const barWidth = (canvasWidth - totalGaps) / NUM_BANDS
   const maxBarHeight = canvasHeight - 6 // leave room at top for peak
-  const totalSegments = Math.floor(maxBarHeight / (SEGMENT_HEIGHT + SEGMENT_GAP))
+  const totalSegments = Math.floor(maxBarHeight / (segHeight + SEGMENT_GAP))
 
   for (let i = 0; i < NUM_BANDS; i++) {
     const x = i * (barWidth + BAR_GAP)
@@ -238,7 +267,7 @@ function draw() {
 
     // Draw segments bottom-up
     for (let s = 0; s < totalSegments; s++) {
-      const segY = canvasHeight - (s + 1) * (SEGMENT_HEIGHT + SEGMENT_GAP)
+      const segY = canvasHeight - (s + 1) * (segHeight + SEGMENT_GAP)
       const ratio = s / totalSegments // 0 = bottom, 1 = top
 
       if (s < litSegments) {
@@ -261,19 +290,19 @@ function draw() {
         ctx.shadowBlur = 4
 
         ctx.fillStyle = `rgb(${Math.round(segColor[0])}, ${Math.round(segColor[1])}, ${Math.round(segColor[2])})`
-        ctx.fillRect(x, segY, barWidth, SEGMENT_HEIGHT)
+        drawSegment(ctx, x, segY, barWidth, segHeight, retro)
       } else if (s === peakSegment && peakSegment > 0) {
         // Peak indicator segment
         const peakColor = brighten(primary, 0.5)
         ctx.shadowColor = `rgba(${Math.round(peakColor[0])}, ${Math.round(peakColor[1])}, ${Math.round(peakColor[2])}, 0.5)`
         ctx.shadowBlur = 3
         ctx.fillStyle = `rgba(${Math.round(peakColor[0])}, ${Math.round(peakColor[1])}, ${Math.round(peakColor[2])}, 0.85)`
-        ctx.fillRect(x, segY, barWidth, SEGMENT_HEIGHT)
+        drawSegment(ctx, x, segY, barWidth, segHeight, retro)
       } else {
         // Unlit segment — very faint outline for the grid effect
         ctx.shadowBlur = 0
         ctx.fillStyle = 'rgba(255, 255, 255, 0.03)'
-        ctx.fillRect(x, segY, barWidth, SEGMENT_HEIGHT)
+        drawSegment(ctx, x, segY, barWidth, segHeight, retro)
       }
     }
 

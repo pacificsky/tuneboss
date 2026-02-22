@@ -19,6 +19,7 @@ app.get('/api/config', (req, res) => {
   const wipeInterval = parseInt(process.env.TRACK_WIPE_INTERVAL, 10);
   res.json({
     enableSpectrum: process.env.ENABLE_SPECTRUM !== 'false',
+    spectrumStyle: process.env.SPECTRUM_STYLE || 'modern',
     enableTrackWipe: process.env.ENABLE_TRACK_WIPE === 'true',
     trackWipeInterval: wipeInterval > 0 ? wipeInterval : 10
   });
