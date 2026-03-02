@@ -257,12 +257,26 @@ sudo journalctl -u caddy -f
 
 ## Troubleshooting
 
+**Port 3000 already in use**
+- Another process (often another dev server) is already listening on port 3000.
+- Change `PORT` in `.env` to an available port (e.g., `3001`) and update `SPOTIFY_REDIRECT_URI` to match (e.g., `http://localhost:3001/auth/spotify/callback`).
+- Update the Redirect URI in your [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) to match the new port.
+- If using Docker, also update the port mapping in your `docker-compose.local.yml`.
+
+**`INVALID_CLIENT` error during OAuth**
+- Double-check that `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in `.env` match exactly what's shown in your [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) — no extra spaces or quotes.
+- Make sure you copied the **Client Secret** (click "View client secret"), not the Client ID twice.
+- Confirm your Spotify app hasn't been deleted or recreated — credentials change if you make a new app.
+
+**`Insecure redirect URI` or redirect URI mismatch**
+- Spotify requires the redirect URI to use HTTPS or a loopback address (`http://localhost:...` or `http://127.0.0.1:...`).
+- LAN IPs over plain HTTP (e.g., `http://192.168.1.100:3000/...`) will be rejected. For local development, use `http://127.0.0.1:3000/auth/spotify/callback` as the redirect URI in both `.env` and the Spotify Dashboard.
+- The redirect URI in `.env` must match **exactly** what's in the Spotify Dashboard — including the scheme (`http` vs `https`), host, port, and path.
+- If you need to access from other devices on your network, use the HTTPS setup in [Option 2](#option-2-homelab-with-https) or [Option 3's Caddy section](#adding-https-without-docker-caddy--systemd).
+
 **"Nothing playing" even though music is on**
 - Verify you're logged into the same Spotify account on both the server and the device playing music.
 - Spotify's API only reports playback from Spotify apps — it won't detect other audio sources.
-
-**OAuth redirect fails**
-- The redirect URI in `.env` must match **exactly** what's in the Spotify Dashboard (including `http` vs `https` and port number).
 
 **iPhone display goes to sleep**
 - The Screen Wake Lock API requires HTTPS. Without HTTPS, set Auto-Lock to Never (Settings → Display & Brightness → Auto-Lock).
